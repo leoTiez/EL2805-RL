@@ -66,7 +66,6 @@ class Maze:
                 next_b = self.pos_b
                 break
 
-
         # Reset previous position
         self.maze[self.pos_b[0], self.pos_b[1]] = 0
         # Set new position via collapsing maze
@@ -85,6 +84,9 @@ class Maze:
             return Maze.STATE_DICT['winning']
         else:
             return Maze.STATE_DICT['running']
+
+    def reward(self, state):
+        return 1 if np.all(state == self.goal_state) else 0
 
     def _is_in_bounds(self, state_indices):
         out_of_left_bound = state_indices[1] < 0
