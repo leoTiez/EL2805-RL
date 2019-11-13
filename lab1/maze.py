@@ -29,7 +29,7 @@ class Maze:
         self.pos_b = np.asarray(init_pos_b)
         self.goal_state = np.asarray(goal_state)
         self.wall_mask = wall_mask
-        self.maze = self._create_maze()
+        self.maze, self.policy = self._create_maze()
 
     def next_state(self, move):
         # Calculate move of a
@@ -99,11 +99,18 @@ class Maze:
         if self.wall_mask is None:
             self.wall_mask = self._create_default_wall_mask()
         maze = np.zeros(self.maze_size)
+        # Create 4 dim policy matrix to determine move in every state A and B is in
+        policy = np.random.choice(Maze.MOVE_ARRAY, (
+            self.maze_size[0],
+            self.maze_size[1],
+            self.maze_size[0],
+            self.maze_size[1]
+        ))
         maze[self.wall_mask] = np.NINF
         maze[self.pos_a[0], self.pos_a[1]] = Maze.A
         maze[self.pos_b[0], self.pos_b[1]] = Maze.B
 
-        return maze
+        return maze, policy
 
     def _create_default_wall_mask(self):
         wall_mask = np.full(self.maze_size, False, dtype='bool')
