@@ -4,6 +4,12 @@ import numpy as np
 
 class Maze:
 
+    STATE_DICT = {
+        'loosing': -1,
+        'running': 0,
+        'winning': 1
+    }
+
     MOVE_DICT = {
         'up': (1, 0),
         'down': (-1, 0),
@@ -17,10 +23,11 @@ class Maze:
     A = 1
     B = 2
 
-    def __init__(self, size=(7, 8), init_pos_a=(0, 0), init_pos_b=(6,5), wall_mask=None):
+    def __init__(self, size=(7, 8), init_pos_a=(0, 0), init_pos_b=(6, 5), goal_state=(6, 5), wall_mask=None):
         self.maze_size = size
         self.pos_a = init_pos_a
         self.pos_b = init_pos_b
+        self.goal_state = goal_state
         self.wall_mask = wall_mask
         self.maze = self._create_maze()
 
@@ -58,13 +65,17 @@ class Maze:
         next_b = np.where(self.maze == Maze.B)
 
         if next_b == next_a:
-            return False
+            return Maze.STATE_DICT['loosing']
 
         # Set new positions
         self.pos_a = next_a
         self.maze[self.pos_a] = Maze.A
         self.pos_b = next_b
-        return True
+
+        if next_a == self.goal_state:
+            return Maze.STATE_DICT['winning']
+        else:
+            return Maze.STATE_DICT['running']
 
     def _create_maze(self):
         if self.wall_mask is None:
