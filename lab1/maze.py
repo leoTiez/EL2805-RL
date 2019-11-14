@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 import numpy as np
+from matplotlib import pyplot as plt
 
 
 class Maze:
@@ -39,7 +40,6 @@ class Maze:
         self.wall_mask = wall_mask
         self.time_horizon = time_horizon
         self.maze, self.policy = self._create_maze()
-
 
     def _next_state(self, state, maze, is_a=False):
         if is_a and np.all(state == self.goal_state):
@@ -108,6 +108,11 @@ class Maze:
 
     def reward(self, state):
         return 1 if np.all(state == self.goal_state) else 0
+
+    def plot_state(self):
+        plt.matshow(self.maze, cmap=plt.cm.cividis)
+        plt.grid()
+        plt.show()
 
     def _is_in_bounds_all(self, state_indices):
         return not any(self._is_in_bounds(state_indices))
@@ -181,7 +186,7 @@ class Maze:
 if __name__ == '__main__':
     np.random.seed(1)
     maze = Maze()
-    maze.set_policy(maze.learn_optimal_policy())
-    maze.run()
+    # maze.set_policy(maze.learn_optimal_policy())
+    # maze.run()
 
 
