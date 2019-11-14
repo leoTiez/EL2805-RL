@@ -29,9 +29,11 @@ class Maze:
             init_pos_a=[0, 0],
             init_pos_b=[6, 5],
             goal_state=[6, 5],
-            time_horizon=30,
+            time_horizon=20,
             wall_mask=None
     ):
+        self.init_pos_a = np.asarray(init_pos_a)
+        self.init_pos_b = np.asarray(init_pos_b)
         self.maze_size = size
         self.pos_a = np.asarray(init_pos_a)
         self.pos_b = np.asarray(init_pos_b)
@@ -39,6 +41,12 @@ class Maze:
         self.wall_mask = wall_mask
         self.time_horizon = time_horizon
         self.maze, self.policy = self._create_maze()
+
+    def reset(self):
+        self.pos_a = self.init_pos_a
+        self.pos_b = self.init_pos_b
+
+        self.maze, _ = self._create_maze()
 
 
     def _next_state(self, state, maze, is_a=False):
@@ -97,11 +105,13 @@ class Maze:
             return Maze.STATE_DICT['running']
 
     def run(self):
+        game_result = -1
         for i in range(self.time_horizon):
-            print(self.next_state(
+            game_result = self.next_state(
                 self.policy[self.pos_a[0], self.pos_a[1],
                             self.pos_b[0], self.pos_b[1]]
-            ))
+            )
+        return game_result
 
     def set_policy(self, policy):
         self.policy = policy
@@ -179,9 +189,26 @@ class Maze:
 
 
 if __name__ == '__main__':
-    np.random.seed(1)
+    # np.random.seed(1)
     maze = Maze()
     maze.set_policy(maze.learn_optimal_policy())
-    maze.run()
+    trials = 10000
+
+    wins = 0
+    draws = 0
+    losses = 0
+
+    for i in range(trials):
+        res = maze.run()
+        if res == 1:
+            wins += 1
+        elif res == 0:
+            draws += 1
+        elif res == -1:
+            losses += 1
+        maze.reset()
+    print('wins %d draws %d losses %d' % (wins, draws, losses))
+    print('wins %f draws %f losses %f' % (wins / trials, draws / trials,
+                                          losses / trials))
 
 
