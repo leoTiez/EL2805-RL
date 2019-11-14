@@ -11,7 +11,7 @@ class Maze:
         'winning': 1
     }
 
-    MOVE_DICT = {
+    MOVE_DICT_A = {
         'up': np.asarray([-1, 0]),
         'down': np.asarray([1, 0]),
         'right': np.asarray([0, 1]),
@@ -19,7 +19,12 @@ class Maze:
         'stay': np.asarray([0, 0])
     }
 
-    MOVE_ARRAY = ['up', 'down', 'right', 'left', 'stay']
+    MOVE_DICT_B = {
+        'up': np.asarray([-1, 0]),
+        'down': np.asarray([1, 0]),
+        'right': np.asarray([0, 1]),
+        'left': np.asarray([0, -1])
+    }
 
     A = 1
     B = 2
@@ -55,7 +60,12 @@ class Maze:
 
         next_moves = []
 
-        for move in self.MOVE_DICT.values():
+        if is_a:
+            move_dict = Maze.MOVE_DICT_A
+        else:
+            move_dict = Maze.MOVE_DICT_B
+
+        for move in move_dict.values():
             next_state = state + move
             if self._is_in_bounds_all(next_state):
                 if is_a and not np.isneginf(maze[tuple(next_state)]):
@@ -74,7 +84,6 @@ class Maze:
         """Assumed that `move` is a valid move for player a"""
         # Calculate move of a
         next_a = self.pos_a + move
-
 
         # Calculate move of b
         next_moves_b = self._next_move_b(self.pos_b, self.maze)
@@ -172,19 +181,12 @@ class Maze:
         if self.wall_mask is None:
             self.wall_mask = self._create_default_wall_mask()
         maze = np.zeros(self.maze_size)
-        # Create 4 dim policy matrix to determine move in every state A and B is in
-        policy = np.random.choice(Maze.MOVE_ARRAY, (
-            self.maze_size[0],
-            self.maze_size[1],
-            self.maze_size[0],
-            self.maze_size[1]
-        ))
 
         maze[self.wall_mask] = np.NINF
         maze[self.pos_a[0], self.pos_a[1]] = Maze.A
         maze[self.pos_b[0], self.pos_b[1]] = Maze.B
 
-        return maze, policy
+        return maze
 
     def _create_default_wall_mask(self):
         wall_mask = np.full(self.maze_size, False, dtype='bool')
