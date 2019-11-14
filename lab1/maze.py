@@ -70,7 +70,7 @@ class Maze:
     def _next_move_b(self, state_b, maze):
         return self._next_state(state_b, maze, is_a=False)
 
-    def next_state(self, move):
+    def next_state(self, move, plot_state=True):
         """Assumed that `move` is a valid move for player a"""
         # Calculate move of a
         next_a = self.pos_a + move
@@ -96,6 +96,9 @@ class Maze:
         is_at_goal = np.all(next_a == self.goal_state)
         is_prev_stay = np.all(move == np.asarray([0, 0]))
 
+        if plot_state:
+            self.plot_state()
+
         if (not is_at_goal and is_at_same_pos) or \
                 (is_at_goal and is_at_same_pos and not is_prev_stay):
             return Maze.STATE_DICT['losing']
@@ -104,12 +107,13 @@ class Maze:
         else:
             return Maze.STATE_DICT['running']
 
-    def run(self):
+    def run(self, plot_state=True):
         game_result = -1
         for i in range(self.time_horizon):
             game_result = self.next_state(
                 self.policy[self.pos_a[0], self.pos_a[1],
-                            self.pos_b[0], self.pos_b[1]]
+                            self.pos_b[0], self.pos_b[1]],
+                plot_state=plot_state
             )
         return game_result
 
@@ -140,6 +144,7 @@ class Maze:
         pi = np.zeros(self.policy.shape + (2,), dtype='int64')
 
         u[self.goal_state, :, :] = self.reward(self.goal_state)
+
         for t in range(self.time_horizon - 1, 0, -1):
             # check if deep copy
             u_t = np.copy(u)
@@ -204,7 +209,7 @@ if __name__ == '__main__':
     losses = 0
 
     for i in range(trials):
-        res = maze.run()
+        res = maze.run(plot_state=True)
         if res == 1:
             wins += 1
         elif res == 0:
