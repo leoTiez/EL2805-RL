@@ -23,12 +23,21 @@ class Maze:
     A = 1
     B = 2
 
-    def __init__(self, size=(7, 8), init_pos_a=[0, 0], init_pos_b=[6, 5], goal_state=[6, 5], wall_mask=None):
+    def __init__(
+            self,
+            size=(7, 8),
+            init_pos_a=[0, 0],
+            init_pos_b=[6, 5],
+            goal_state=[6, 5],
+            time_horizon=20,
+            wall_mask=None
+    ):
         self.maze_size = size
         self.pos_a = np.asarray(init_pos_a)
         self.pos_b = np.asarray(init_pos_b)
         self.goal_state = np.asarray(goal_state)
         self.wall_mask = wall_mask
+        self.time_horizon = time_horizon
         self.maze, self.policy = self._create_maze()
 
     def next_state(self, move):
