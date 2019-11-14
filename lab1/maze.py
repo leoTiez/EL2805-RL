@@ -83,6 +83,7 @@ class Maze:
 
         # Reset previous position
         self.maze[self.pos_b[0], self.pos_b[1]] = 0
+        self.maze[self.wall_mask] = np.NINF
         # Set new position via collapsing maze
         self.maze[next_b[0], next_b[1]] = Maze.B
 
