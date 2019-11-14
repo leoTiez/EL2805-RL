@@ -5,7 +5,7 @@ import numpy as np
 class Maze:
 
     STATE_DICT = {
-        'loosing': -1,
+        'losing': -1,
         'running': 0,
         'winning': 1
     }
@@ -29,7 +29,7 @@ class Maze:
             init_pos_a=[0, 0],
             init_pos_b=[6, 5],
             goal_state=[6, 5],
-            time_horizon=20,
+            time_horizon=30,
             wall_mask=None
     ):
         self.maze_size = size
@@ -40,48 +40,43 @@ class Maze:
         self.time_horizon = time_horizon
         self.maze, self.policy = self._create_maze()
 
+
+    def _next_state(self, state, maze, is_a=False):
+        if is_a and np.all(state == self.goal_state):
+            return [state]
+
+        next_moves = []
+
+        for move in self.MOVE_DICT.values():
+            next_state = state + move
+            if self._is_in_bounds_all(next_state):
+                if is_a and not np.isneginf(maze[tuple(next_state)]):
+                    next_moves.append(next_state)
+                else:
+                    next_moves.append(next_state)
+        return next_moves
+
+    def _next_move_a(self, state_a, maze):
+        return self._next_state(state_a, maze, is_a=True)
+
+    def _next_move_b(self, state_b, maze):
+        return self._next_state(state_b, maze, is_a=False)
+
     def next_state(self, move):
+        """Assumed that `move` is a valid move for player a"""
         # Calculate move of a
-        next_a = self.pos_a + Maze.MOVE_DICT[move]
+        next_a = self.pos_a + move
 
-        (out_of_left_bound,
-         out_of_right_bound,
-         out_of_upper_bound,
-         out_of_lower_bound) = self._is_in_bounds(next_a)
-        is_wall = np.isneginf(self.maze[next_a[0], next_a[1]])
-
-        if out_of_left_bound or out_of_right_bound or out_of_lower_bound or out_of_upper_bound or is_wall:
-            next_a = self.pos_a
 
         # Calculate move of b
-        move_b = Maze.MOVE_DICT[np.random.choice(Maze.MOVE_ARRAY)]
-        next_b = self.pos_b + move_b
-
-        (out_of_left_bound,
-         out_of_right_bound,
-         out_of_upper_bound,
-         out_of_lower_bound) = self._is_in_bounds(next_b)
-        if out_of_left_bound or out_of_right_bound or out_of_lower_bound or out_of_upper_bound:
-            next_b = self.pos_b
-
-        # Set move of b
-        while np.isneginf(self.maze[next_b[0], next_b[1]]):
-            next_b += move_b
-            (out_of_left_bound,
-             out_of_right_bound,
-             out_of_upper_bound,
-             out_of_lower_bound) = self._is_in_bounds(next_b)
-            if out_of_left_bound or out_of_right_bound or out_of_lower_bound or out_of_upper_bound:
-                next_b = self.pos_b
-                break
+        next_moves_b = self._next_move_b(self.pos_b, self.maze)
+        pick_move = np.random.randint(0, len(next_moves_b))
+        next_b = next_moves_b[pick_move]
 
         # Reset previous position
         self.maze[self.pos_b[0], self.pos_b[1]] = 0
         # Set new position via collapsing maze
         self.maze[next_b[0], next_b[1]] = Maze.B
-
-        if np.all(next_b == next_a):
-            return Maze.STATE_DICT['loosing']
 
         # Set new positions
         self.maze[self.pos_a[0], self.pos_a[1]] = 0
@@ -89,20 +84,68 @@ class Maze:
         self.pos_a = next_a
         self.pos_b = next_b
 
-        if np.all(next_a == self.goal_state):
+        is_at_same_pos = np.all(next_a == next_b)
+        is_at_goal = np.all(next_a == self.goal_state)
+        is_prev_stay = np.all(move == np.asarray([0, 0]))
+
+        if (not is_at_goal and is_at_same_pos) or \
+                (is_at_goal and is_at_same_pos and not is_prev_stay):
+            return Maze.STATE_DICT['losing']
+        elif np.all(next_a == self.goal_state):
             return Maze.STATE_DICT['winning']
         else:
             return Maze.STATE_DICT['running']
 
+    def run(self):
+        for i in range(self.time_horizon):
+            print(self.next_state(
+                self.policy[self.pos_a[0], self.pos_a[1],
+                            self.pos_b[0], self.pos_b[1]]
+            ))
+
+    def set_policy(self, policy):
+        self.policy = policy
+
     def reward(self, state):
         return 1 if np.all(state == self.goal_state) else 0
+
+    def _is_in_bounds_all(self, state_indices):
+        return not any(self._is_in_bounds(state_indices))
 
     def _is_in_bounds(self, state_indices):
         out_of_left_bound = state_indices[1] < 0
         out_of_right_bound = state_indices[1] >= self.maze_size[1]
         out_of_upper_bound = state_indices[0] < 0
         out_of_lower_bound = state_indices[0] >= self.maze_size[0]
-        return  out_of_left_bound, out_of_right_bound, out_of_upper_bound, out_of_lower_bound
+        return  out_of_left_bound, out_of_right_bound, out_of_upper_bound, \
+                out_of_lower_bound
+
+    def learn_optimal_policy(self):
+        u = np.zeros(self.policy.shape)
+        pi = np.zeros(self.policy.shape + (2,), dtype='int64')
+
+        u[self.goal_state, :, :] = self.reward(self.goal_state)
+        for t in range(self.time_horizon - 1, 0, -1):
+            # check if deep copy
+            u_t = np.copy(u)
+            for state_ind, _ in np.ndenumerate(u):
+
+                next_rewards = []
+                next_moves = []
+                next_moves_a = self._next_move_a(state_ind[0:2], self.maze)
+                for sa in next_moves_a:
+                    next_moves_b = self._next_move_b(state_ind[2:4], self.maze)
+                    p = 1.0 / len(next_moves_b)
+                    for sb in next_moves_b:
+                        next_rewards.append(
+                            p * u_t[sa[0], sa[1], sb[0], sb[1]]
+                        )
+                        next_moves.append(sa)
+                u[state_ind] = np.max(next_rewards)
+                if t == 1:
+                    pi[state_ind] = next_moves[np.argmax(next_rewards)] - np.asarray(state_ind[0:2])
+
+        return pi
 
     def _create_maze(self):
         if self.wall_mask is None:
@@ -115,6 +158,7 @@ class Maze:
             self.maze_size[0],
             self.maze_size[1]
         ))
+
         maze[self.wall_mask] = np.NINF
         maze[self.pos_a[0], self.pos_a[1]] = Maze.A
         maze[self.pos_b[0], self.pos_b[1]] = Maze.B
@@ -137,6 +181,7 @@ class Maze:
 if __name__ == '__main__':
     np.random.seed(1)
     maze = Maze()
-    maze.next_state('down')
+    maze.set_policy(maze.learn_optimal_policy())
+    maze.run()
 
 
