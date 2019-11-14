@@ -148,22 +148,6 @@ class Maze:
         else:
             return Maze.STATE_DICT['running']
 
-    def plot_state(self):
-        plt.matshow(self.maze, cmap=plt.cm.cividis)
-        plt.grid()
-        plt.show()
-
-    def _is_in_bounds_all(self, state_indices):
-        return not any(self._is_in_bounds(state_indices))
-
-    def _is_in_bounds(self, state_indices):
-        out_of_left_bound = state_indices[1] < 0
-        out_of_right_bound = state_indices[1] >= self.maze_size[1]
-        out_of_upper_bound = state_indices[0] < 0
-        out_of_lower_bound = state_indices[0] >= self.maze_size[0]
-        return out_of_left_bound, out_of_right_bound, out_of_upper_bound, \
-               out_of_lower_bound
-
     def learn_optimal_policy(self):
         u = np.zeros(self.maze_size + self.maze_size)
         pi = np.zeros(self.maze_size + self.maze_size + (2,), dtype='int64')
@@ -191,6 +175,21 @@ class Maze:
             u = u_t
 
         return pi
+
+    def plot_state(self):
+        plt.matshow(self.maze, cmap=plt.cm.cividis)
+        plt.grid()
+        plt.show()
+
+    def _is_in_bounds_all(self, state_indices):
+        return not any(self._is_in_bounds(state_indices))
+
+    def _is_in_bounds(self, state_indices):
+        out_of_left_bound = state_indices[1] < 0
+        out_of_right_bound = state_indices[1] >= self.maze_size[1]
+        out_of_upper_bound = state_indices[0] < 0
+        out_of_lower_bound = state_indices[0] >= self.maze_size[0]
+        return out_of_left_bound, out_of_right_bound, out_of_upper_bound, out_of_lower_bound
 
     def _create_maze(self):
         if self.wall_mask is None:
