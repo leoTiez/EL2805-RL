@@ -34,7 +34,7 @@ class Maze:
             size=(7, 8),
             init_pos_a=[0, 0],
             init_pos_b=[6, 5],
-            goal_state=[6, 5],
+            goal_state=[6, 5], # TODO change
             time_horizon=20,
             wall_mask=None
     ):
@@ -46,19 +46,20 @@ class Maze:
         self.goal_state = np.asarray(goal_state)
         self.wall_mask = wall_mask
         self.time_horizon = time_horizon
-        self.maze, self.policy = self._create_maze()
+        self.policy = None
+        self.maze = self._create_maze()
         
     def reset(self):
         self.pos_a = self.init_pos_a
         self.pos_b = self.init_pos_b
 
-        self.maze, _ = self._create_maze()
+        self.maze = self._create_maze()
         
     def _next_state(self, state, maze, is_a=False):
         if is_a and np.all(state == self.goal_state):
             return [state]
 
-        next_moves = []
+        next_states = []
 
         if is_a:
             move_dict = Maze.MOVE_DICT_A
@@ -68,11 +69,12 @@ class Maze:
         for move in move_dict.values():
             next_state = state + move
             if self._is_in_bounds_all(next_state):
-                if is_a and not np.isneginf(maze[tuple(next_state)]):
-                    next_moves.append(next_state)
+                if is_a:
+                    if not np.isneginf(maze[tuple(next_state)]):
+                        next_states.append(next_state)
                 else:
-                    next_moves.append(next_state)
-        return next_moves
+                    next_states.append(next_state)
+        return next_states
 
     def _next_move_a(self, state_a, maze):
         return self._next_state(state_a, maze, is_a=True)
@@ -118,6 +120,9 @@ class Maze:
             return Maze.STATE_DICT['running']
 
     def run(self, plot_state=True):
+        if self.policy is None:
+            raise ValueError('Policy is none and should be set before')
+
         game_result = -1
         for i in range(self.time_horizon):
             game_result = self.next_state(
@@ -125,13 +130,15 @@ class Maze:
                             self.pos_b[0], self.pos_b[1]],
                 plot_state=plot_state
             )
+            if game_result == Maze.STATE_DICT['losing'] or game_result == Maze.STATE_DICT['winning']:
+                break
         return game_result
 
     def set_policy(self, policy):
         self.policy = policy
 
-    def reward(self, state):
-        return 1 if np.all(state == self.goal_state) else 0
+    def reward(self, state, reward=10):
+        return reward if np.all(state == self.goal_state) else 0
 
     def plot_state(self):
         plt.matshow(self.maze, cmap=plt.cm.cividis)
@@ -150,30 +157,35 @@ class Maze:
                 out_of_lower_bound
 
     def learn_optimal_policy(self):
-        u = np.zeros(self.policy.shape)
-        pi = np.zeros(self.policy.shape + (2,), dtype='int64')
+        u = np.zeros(self.maze_size + self.maze_size)
+        pi = np.zeros(self.maze_size + self.maze_size + (2,), dtype='int64')
 
-        u[self.goal_state, :, :] = self.reward(self.goal_state)
+        u[self.goal_state[0], self.goal_state[1], :, :] = self.reward(self.goal_state)
 
         for t in range(self.time_horizon - 1, 0, -1):
             # check if deep copy
             u_t = np.copy(u)
-            for state_ind, _ in np.ndenumerate(u):
+            for state_ind in np.ndindex(u.shape):
+                # If in same state that is not the goal state we are eaten
+                if state_ind[:2] == state_ind[2:] and np.any(np.asarray(state_ind[:2]) != self.goal_state):
+                    u_t[state_ind] = 0
+                    continue
 
                 next_rewards = []
                 next_moves = []
                 next_moves_a = self._next_move_a(state_ind[0:2], self.maze)
+                next_moves_b = self._next_move_b(state_ind[2:4], self.maze)
+                p = 1.0 / len(next_moves_b)
                 for sa in next_moves_a:
-                    next_moves_b = self._next_move_b(state_ind[2:4], self.maze)
-                    p = 1.0 / len(next_moves_b)
                     for sb in next_moves_b:
                         next_rewards.append(
                             p * u_t[sa[0], sa[1], sb[0], sb[1]]
                         )
                         next_moves.append(sa)
-                u[state_ind] = np.max(next_rewards)
+                u_t[state_ind] = np.max(next_rewards)
                 if t == 1:
                     pi[state_ind] = next_moves[np.argmax(next_rewards)] - np.asarray(state_ind[0:2])
+            u = u_t
 
         return pi
 
@@ -203,7 +215,7 @@ class Maze:
 
 def main():
     # np.random.seed(1)
-    maze = Maze()
+    maze = Maze(time_horizon=20)
     maze.set_policy(maze.learn_optimal_policy())
     trials = 10000
 
@@ -213,11 +225,11 @@ def main():
 
     for i in range(trials):
         res = maze.run(plot_state=True)
-        if res == 1:
+        if res == Maze.STATE_DICT['winning']:
             wins += 1
-        elif res == 0:
+        elif res == Maze.STATE_DICT['running']:
             draws += 1
-        elif res == -1:
+        elif res == Maze.STATE_DICT['losing']:
             losses += 1
         maze.reset()
     print('wins %d draws %d losses %d' % (wins, draws, losses))
@@ -225,6 +237,44 @@ def main():
                                           losses / trials))
 
 
+def test_maze():
+    maze_size = (5, 5)
+    wall_mask = np.zeros(maze_size, dtype='bool')
+    init_pos_a = [0, 0]
+    init_pos_b = [4, 4]
+    goal_state = [4, 4]
+    time_horizon = 20
+    maze = Maze(
+        size=maze_size,
+        init_pos_a=init_pos_a,
+        init_pos_b=init_pos_b,
+        goal_state=goal_state,
+        wall_mask=wall_mask,
+        time_horizon=time_horizon
+    )
+    maze.set_policy(maze.learn_optimal_policy())
+
+    trials = 10000
+    wins = 0
+    draws = 0
+    losses = 0
+
+    for i in range(trials):
+        res = maze.run(plot_state=True)
+        if res == Maze.STATE_DICT['winning']:
+            wins += 1
+        elif res == Maze.STATE_DICT['running']:
+            draws += 1
+        elif res == Maze.STATE_DICT['losing']:
+            losses += 1
+        maze.reset()
+
+    print('wins %d draws %d losses %d' % (wins, draws, losses))
+    print('wins %f draws %f losses %f' % (wins / trials, draws / trials,
+                                          losses / trials))
+
+
 if __name__ == '__main__':
+    # test_maze()
     main()
 
