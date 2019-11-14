@@ -199,7 +199,7 @@ class Maze:
         return wall_mask
 
 
-if __name__ == '__main__':
+def main():
     # np.random.seed(1)
     maze = Maze()
     maze.set_policy(maze.learn_optimal_policy())
@@ -222,4 +222,7 @@ if __name__ == '__main__':
     print('wins %f draws %f losses %f' % (wins / trials, draws / trials,
                                           losses / trials))
 
+
+if __name__ == '__main__':
+    main()
 
