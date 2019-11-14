@@ -4,7 +4,6 @@ from matplotlib import pyplot as plt
 
 
 class Maze:
-
     STATE_DICT = {
         'losing': -1,
         'running': 0,
@@ -34,7 +33,7 @@ class Maze:
             size=(7, 8),
             init_pos_a=[0, 0],
             init_pos_b=[6, 5],
-            goal_state=[6, 5], # TODO change
+            goal_state=[6, 5],  # TODO change
             time_horizon=20,
             wall_mask=None
     ):
@@ -48,13 +47,13 @@ class Maze:
         self.time_horizon = time_horizon
         self.policy = None
         self.maze = self._create_maze()
-        
+
     def reset(self):
         self.pos_a = self.init_pos_a
         self.pos_b = self.init_pos_b
 
         self.maze = self._create_maze()
-        
+
     def _next_state(self, state, maze, is_a=False):
         if is_a and np.all(state == self.goal_state):
             return [state]
@@ -153,8 +152,8 @@ class Maze:
         out_of_right_bound = state_indices[1] >= self.maze_size[1]
         out_of_upper_bound = state_indices[0] < 0
         out_of_lower_bound = state_indices[0] >= self.maze_size[0]
-        return  out_of_left_bound, out_of_right_bound, out_of_upper_bound, \
-                out_of_lower_bound
+        return out_of_left_bound, out_of_right_bound, out_of_upper_bound, \
+               out_of_lower_bound
 
     def learn_optimal_policy(self):
         u = np.zeros(self.maze_size + self.maze_size)
@@ -167,24 +166,19 @@ class Maze:
             u_t = np.copy(u)
             for state_ind in np.ndindex(u.shape):
                 # If in same state that is not the goal state we are eaten
-                if state_ind[:2] == state_ind[2:] and np.any(np.asarray(state_ind[:2]) != self.goal_state):
-                    u_t[state_ind] = 0
-                    continue
-
                 next_rewards = []
-                next_moves = []
                 next_moves_a = self._next_move_a(state_ind[0:2], self.maze)
                 next_moves_b = self._next_move_b(state_ind[2:4], self.maze)
                 p = 1.0 / len(next_moves_b)
                 for sa in next_moves_a:
+                    summed_reward_over_states = 0
                     for sb in next_moves_b:
-                        next_rewards.append(
-                            p * u_t[sa[0], sa[1], sb[0], sb[1]]
-                        )
-                        next_moves.append(sa)
+                        summed_reward_over_states += p * u_t[sa[0], sa[1], sb[0], sb[1]]
+
+                    next_rewards.append(summed_reward_over_states)
                 u_t[state_ind] = np.max(next_rewards)
                 if t == 1:
-                    pi[state_ind] = next_moves[np.argmax(next_rewards)] - np.asarray(state_ind[0:2])
+                    pi[state_ind] = next_moves_a[np.argmax(next_rewards)] - np.asarray(state_ind[0:2])
             u = u_t
 
         return pi
