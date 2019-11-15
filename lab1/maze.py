@@ -33,7 +33,7 @@ class Maze:
             size=(7, 8),
             init_pos_a=[0, 0],
             init_pos_b=[6, 5],
-            goal_state=[6, 5],  # TODO change
+            goal_state=[6, 5],
             time_horizon=20,
             wall_mask=None
     ):
@@ -93,12 +93,12 @@ class Maze:
 
         # Reset previous position
         self.maze[self.pos_b[0], self.pos_b[1]] = 0
+        self.maze[self.pos_a[0], self.pos_a[1]] = 0
         self.maze[self.wall_mask] = np.NINF
         # Set new position via collapsing maze
         self.maze[next_b[0], next_b[1]] = Maze.B
 
         # Set new positions
-        self.maze[self.pos_a[0], self.pos_a[1]] = 0
         self.maze[next_a[0], next_a[1]] = Maze.A
         self.pos_a = next_a
         self.pos_b = next_b
@@ -155,7 +155,6 @@ class Maze:
         u[self.goal_state[0], self.goal_state[1], :, :] = self.reward(self.goal_state, None)
 
         for t in range(self.time_horizon - 1, 0, -1):
-            # check if deep copy
             u_t = np.copy(u)
             for state_ind in np.ndindex(u.shape):
                 next_rewards = []
