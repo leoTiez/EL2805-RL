@@ -157,21 +157,25 @@ class Maze:
         for t in range(self.time_horizon - 1, 0, -1):
             u_t = np.copy(u)
             for state_ind in np.ndindex(u.shape):
-                next_rewards = []
-                next_moves_a = self._next_move_a(state_ind[0:2], self.maze)
-                next_moves_b = self._next_move_b(state_ind[2:4], self.maze)
-                p = 1.0 / len(next_moves_b)
-                for sa in next_moves_a:
-                    summed_reward_over_states = 0
-                    for sb in next_moves_b:
-                        summed_reward_over_states += self.reward(state_ind[:2], state_ind[2:]) +\
-                                                     p * u_t[sa[0], sa[1], sb[0], sb[1]]
-
-                    next_rewards.append(summed_reward_over_states)
-                u_t[state_ind] = np.max(next_rewards)
+                u_t[state_ind], best_move_a = self._compute_value(state_ind, u)
                 if t == 1:
-                    pi[state_ind] = next_moves_a[np.argmax(next_rewards)] - np.asarray(state_ind[0:2])
+                    pi[state_ind] = best_move_a
             u = u_t
+
+        return pi
+
+    def learn_optimal_infinite_horizon_policy(self, surviving_p, precision=1e-7):
+        value = np.zeros(self.maze_size + self.maze_size)
+        pi = np.zeros(self.maze_size + self.maze_size + (2,), dtype='int64')
+
+        value_difference = np.Inf
+        while Maze._stopping_criterion(value_difference, precision, surviving_p):
+            value_temp = np.copy(value)
+            for state_ind in np.ndindex(value.shape):
+                value_temp[state_ind], pi[state_ind] = self._compute_value(state_ind, value, surviving_p=surviving_p)
+            value_difference = np.linalg.norm(value - value_temp)
+            print(value_difference)
+            value = value_temp
 
         return pi
 
@@ -179,6 +183,27 @@ class Maze:
         plt.matshow(self.maze, cmap=plt.cm.cividis)
         plt.grid()
         plt.show()
+
+    @staticmethod
+    def _stopping_criterion(value_diff, precision, surviving_p):
+        return value_diff > precision * (1 - surviving_p) / surviving_p
+
+    def _compute_value(self, state_ind, value, surviving_p=1):
+        next_rewards = []
+        next_moves_a = self._next_move_a(state_ind[0:2], self.maze)
+        next_moves_b = self._next_move_b(state_ind[2:4], self.maze)
+        p = 1.0 / len(next_moves_b)
+        for sa in next_moves_a:
+            summed_reward_over_states = 0
+            for sb in next_moves_b:
+                summed_reward_over_states += p * value[sa[0], sa[1], sb[0], sb[1]]
+
+            summed_reward_over_states *= surviving_p
+            summed_reward_over_states += self.reward(state_ind[:2], state_ind[2:])
+            next_rewards.append(summed_reward_over_states)
+
+        new_value = np.max(next_rewards)
+        return new_value, next_moves_a[np.argmax(next_rewards)] - np.asarray(state_ind[0:2])
 
     def _is_in_bounds_all(self, state_indices):
         return not any(self._is_in_bounds(state_indices))
@@ -216,7 +241,13 @@ class Maze:
 
 def main(is_plotting=True):
     maze = Maze(time_horizon=20)
-    maze.set_policy(maze.learn_optimal_policy())
+    print('Start Finite Policy Learning')
+    finite_policy = maze.learn_optimal_policy()
+    print('Start Infinite Policy Learning\n')
+    infinite_policy = maze.learn_optimal_infinite_horizon_policy(29/30., precision=1)
+    print(infinite_policy.size - np.count_nonzero(finite_policy == infinite_policy))
+    assert np.all(finite_policy == infinite_policy)
+    maze.set_policy(infinite_policy)
     trials = 10000
 
     wins = 0
