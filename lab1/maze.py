@@ -34,8 +34,8 @@ class Maze:
             init_pos_a=[0, 0],
             init_pos_b=[6, 5],
             goal_state=[6, 5],
-            time_horizon=20,
-            wall_mask=None
+            wall_mask=None,
+            verbosity=1
     ):
         self.init_pos_a = np.asarray(init_pos_a)
         self.init_pos_b = np.asarray(init_pos_b)
@@ -44,8 +44,8 @@ class Maze:
         self.pos_b = np.asarray(init_pos_b)
         self.goal_state = np.asarray(goal_state)
         self.wall_mask = wall_mask
-        self.time_horizon = time_horizon
         self.policy = None
+        self.verbosity = verbosity
         self.maze = self._create_maze()
 
     def reset(self):
@@ -118,21 +118,6 @@ class Maze:
         else:
             return Maze.STATE_DICT['running']
 
-    def run(self, plot_state=True):
-        if self.policy is None:
-            raise ValueError('Policy is none and should be set before')
-
-        game_result = -1
-        for i in range(self.time_horizon):
-            game_result = self.next_state(
-                self.policy[self.pos_a[0], self.pos_a[1],
-                            self.pos_b[0], self.pos_b[1]],
-                plot_state=plot_state
-            )
-            if game_result == Maze.STATE_DICT['losing'] or game_result == Maze.STATE_DICT['winning']:
-                break
-        return game_result
-
     def set_policy(self, policy):
         self.policy = policy
 
@@ -147,37 +132,6 @@ class Maze:
             return Maze.STATE_DICT['winning']
         else:
             return Maze.STATE_DICT['running']
-
-    def learn_optimal_policy(self):
-        u = np.zeros(self.maze_size + self.maze_size)
-        pi = np.zeros(self.maze_size + self.maze_size + (2,), dtype='int64')
-
-        u[self.goal_state[0], self.goal_state[1], :, :] = self.reward(self.goal_state, None)
-
-        for t in range(self.time_horizon - 1, 0, -1):
-            u_t = np.copy(u)
-            for state_ind in np.ndindex(u.shape):
-                u_t[state_ind], best_move_a = self._compute_value(state_ind, u)
-                if t == 1:
-                    pi[state_ind] = best_move_a
-            u = u_t
-
-        return pi
-
-    def learn_optimal_infinite_horizon_policy(self, surviving_p, precision=1e-7):
-        value = np.zeros(self.maze_size + self.maze_size)
-        pi = np.zeros(self.maze_size + self.maze_size + (2,), dtype='int64')
-
-        value_difference = np.Inf
-        while Maze._stopping_criterion(value_difference, precision, surviving_p):
-            value_temp = np.copy(value)
-            for state_ind in np.ndindex(value.shape):
-                value_temp[state_ind], pi[state_ind] = self._compute_value(state_ind, value, surviving_p=surviving_p)
-            value_difference = np.linalg.norm(value - value_temp)
-            print(value_difference)
-            value = value_temp
-
-        return pi
 
     def plot_state(self):
         plt.matshow(self.maze, cmap=plt.cm.cividis)
@@ -239,15 +193,109 @@ class Maze:
         return wall_mask
 
 
-def main(is_plotting=True):
-    maze = Maze(time_horizon=20)
+class MazeFiniteHorizon(Maze):
+    def __init__(
+            self,
+            size=(7, 8),
+            init_pos_a=[0, 0],
+            init_pos_b=[6, 5],
+            goal_state=[6, 5],
+            time_horizon=20,
+            wall_mask=None
+    ):
+        self.time_horizon = time_horizon
+        super(MazeFiniteHorizon, self).__init__(
+            size=size,
+            init_pos_a=init_pos_a,
+            init_pos_b=init_pos_b,
+            goal_state=goal_state,
+            wall_mask=wall_mask
+        )
+
+    def learn(self):
+        u = np.zeros(self.maze_size + self.maze_size)
+        pi = np.zeros(self.maze_size + self.maze_size + (2,), dtype='int64')
+
+        u[self.goal_state[0], self.goal_state[1], :, :] = self.reward(self.goal_state, None)
+
+        for t in range(self.time_horizon - 1, 0, -1):
+            u_t = np.copy(u)
+            for state_ind in np.ndindex(u.shape):
+                u_t[state_ind], best_move_a = self._compute_value(state_ind, u)
+                if t == 1:
+                    pi[state_ind] = best_move_a
+            u = u_t
+
+        return pi
+
+    def run(self, plot_state=True):
+        if self.policy is None:
+            raise ValueError('Policy is none and should be set before')
+
+        game_result = -1
+        for i in range(self.time_horizon):
+            game_result = self.next_state(
+                self.policy[self.pos_a[0], self.pos_a[1],
+                            self.pos_b[0], self.pos_b[1]],
+                plot_state=plot_state
+            )
+            if game_result == Maze.STATE_DICT['losing'] or game_result == Maze.STATE_DICT['winning']:
+                break
+        return game_result
+
+
+class MazeInfiniteHorizon(Maze):
+    def learn(self, surviving_p, precision=0.1):
+        value = np.zeros(self.maze_size + self.maze_size)
+        pi = np.zeros(self.maze_size + self.maze_size + (2,), dtype='int64')
+
+        value_difference = np.Inf
+        while Maze._stopping_criterion(value_difference, precision, surviving_p):
+            value_temp = np.copy(value)
+            for state_ind in np.ndindex(value.shape):
+                value_temp[state_ind], pi[state_ind] = self._compute_value(state_ind, value, surviving_p=surviving_p)
+            value_difference = np.linalg.norm(value - value_temp)
+            if self.verbosity > 0:
+                print(value_difference)
+            value = value_temp
+
+        return pi
+
+    def run(self, plot_state=True):
+        if self.policy is None:
+            raise ValueError('Policy is none and should be set before')
+
+        while True:
+            game_result = self.next_state(
+                self.policy[self.pos_a[0], self.pos_a[1],
+                            self.pos_b[0], self.pos_b[1]],
+                plot_state=plot_state
+            )
+            if game_result == Maze.STATE_DICT['losing'] or game_result == Maze.STATE_DICT['winning']:
+                break
+        return game_result
+
+
+def main_comparison():
+    maze_finite = MazeFiniteHorizon(time_horizon=20)
+    maze_infinte = MazeInfiniteHorizon()
     print('Start Finite Policy Learning')
-    finite_policy = maze.learn_optimal_policy()
+    finite_policy = maze_finite.learn()
     print('Start Infinite Policy Learning\n')
-    infinite_policy = maze.learn_optimal_infinite_horizon_policy(29/30., precision=1)
+    infinite_policy = maze_infinte.learn(29/30., precision=1)
     print(infinite_policy.size - np.count_nonzero(finite_policy == infinite_policy))
     assert np.all(finite_policy == infinite_policy)
-    maze.set_policy(infinite_policy)
+
+
+def main(is_finite=True, is_plotting=True):
+    if is_finite:
+        maze = MazeFiniteHorizon(time_horizon=20)
+        policy = maze.learn()
+    else:
+        maze = MazeInfiniteHorizon()
+        policy = maze.learn(29/30., precision=1)
+
+    maze.set_policy(policy)
     trials = 10000
 
     wins = 0
@@ -268,14 +316,14 @@ def main(is_plotting=True):
                                           losses / trials))
 
 
-def test_maze(is_plotting=True):
+def test_maze_finite(is_plotting=True):
     maze_size = (2, 2)
     wall_mask = np.zeros(maze_size, dtype='bool')
     init_pos_a = [0, 0]
     init_pos_b = [1, 1]
     goal_state = [1, 1]
     time_horizon = 4
-    maze = Maze(
+    maze = MazeFiniteHorizon(
         size=maze_size,
         init_pos_a=init_pos_a,
         init_pos_b=init_pos_b,
@@ -283,7 +331,7 @@ def test_maze(is_plotting=True):
         wall_mask=wall_mask,
         time_horizon=time_horizon
     )
-    maze.set_policy(maze.learn_optimal_policy())
+    maze.set_policy(maze.learn())
 
     trials = 10000
     wins = 0
@@ -306,6 +354,8 @@ def test_maze(is_plotting=True):
 
 
 if __name__ == '__main__':
-    # test_maze(is_plotting=False)
-    main(is_plotting=True)
+    # test_maze_finite(is_plotting=False)
+    main_comparison()
+    main(is_finite=True, is_plotting=False)
+    main(is_finite=False, is_plotting=False)
 
