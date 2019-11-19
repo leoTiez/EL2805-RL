@@ -195,11 +195,11 @@ class QLearner(Policy, LegalMovesMixin):
         for episode in range(self.episodes):
             print('Episode: %d' % episode)
             self.enviro.reset()
+            # record the Q-function for the initial state of A
+            if record_initial_q:
+                initial_q.append(np.copy(self.q[initial_idx]))
             q_temp = self.q.copy()
             while True:
-                # record the Q-function for the initial state of A
-                if record_initial_q:
-                    initial_q.append(np.copy(self.q[initial_idx]))
                 # get the move based on epsilon-greedy policy
                 states, moves = self.enviro.next_state_action(
                     self.enviro.pos_a, is_a=True)
@@ -218,7 +218,7 @@ class QLearner(Policy, LegalMovesMixin):
                 cur_idx = state_to_idx([self.enviro.pos_a, self.enviro.pos_p])
                 old_idx = state_to_idx([old_pos_a, old_pos_p])
 
-                update = reward + self.discount_factor * np.max(self.q[cur_idx] - self.q[old_idx])
+                update = reward + self.discount_factor * np.max(self.q[cur_idx]) - self.q[old_idx][move_idx]
                 num_q_update[old_idx][move_idx] += 1
                 if not use_learning_rate:
                     step_size = 1 / (num_q_update[old_idx][move_idx] ** (2/3.))
@@ -254,10 +254,10 @@ def plot_initial_q(initial_q):
 
 if __name__ == '__main__':
     grid = GridTown()
-    policy = QLearner(grid, episodes=int(1e4))
+    policy = QLearner(grid, episodes=int(5e5))
     initial_q = policy.learn(record_initial_q=True, use_learning_rate=False)
 
     plot_initial_q(initial_q)
 
-    #run(grid, policy)
+    run(grid, policy)
 
