@@ -155,7 +155,7 @@ class RandomPolicy(Policy):
 
 class QLearner(Policy, LegalMovesMixin):
     def __init__(self, enviro, learning_rate=0.1, epsilon=0.5,
-                 episodes=int(1e5), discount_factor=0.8):
+                 episodes=int(1e2), discount_factor=0.8):
         self.enviro = enviro
         self.q = np.zeros(
             state_to_idx([
@@ -184,14 +184,23 @@ class QLearner(Policy, LegalMovesMixin):
         else:
             return self.get_move(pos_a, pos_p, actions)
 
-    def learn(self, use_learning_rate=False):
+    def learn(self, record_initial_q=False, use_learning_rate=False):
+        initial_q = []
+
+        initial_idx = state_to_idx([self.enviro.init_pos_a,
+                                    self.enviro.init_pos_p])
+
         num_q_update = np.zeros(self.q.shape)
+
         for episode in range(self.episodes):
             print('Episode: %d' % episode)
             self.enviro.reset()
             q_temp = self.q.copy()
             while True:
-                # get the move based on epsilong-greedy policy
+                # record the Q-function for the initial state of A
+                if record_initial_q:
+                    initial_q.append(np.copy(self.q[initial_idx]))
+                # get the move based on epsilon-greedy policy
                 states, moves = self.enviro.next_state_action(
                     self.enviro.pos_a, is_a=True)
                 move = self.get_epsilon_move(
@@ -222,6 +231,9 @@ class QLearner(Policy, LegalMovesMixin):
             self.q = q_temp
 
 
+        if record_initial_q:
+            return initial_q
+
 def run(grid, policy):
     while True:
         _, actions = grid.next_state_action(grid.pos_a, is_a=True)
@@ -234,11 +246,18 @@ def run(grid, policy):
         if game_result == GridTown.STATE_DICT['exited']:
             break
 
+def plot_initial_q(initial_q):
+    initial_q = np.asarray(initial_q)
+    plt.plot(initial_q)
+    plt.legend(LegalMovesMixin.MOVE_DICT_A.keys())
+    plt.show()
 
 if __name__ == '__main__':
     grid = GridTown()
     policy = QLearner(grid, episodes=int(1e4))
-    policy.learn()
+    initial_q = policy.learn(record_initial_q=True, use_learning_rate=False)
 
-    run(grid, policy)
+    plot_initial_q(initial_q)
+
+    #run(grid, policy)
 
