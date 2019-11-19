@@ -2,11 +2,13 @@
 import numpy as np
 from matplotlib import pyplot as plt
 
+
 def state_to_idx(list):
     idx = ([])
     for value in list:
         idx += tuple(value)
     return tuple(idx)
+
 
 class LegalMovesMixin:
     MOVE_DICT_A = {
@@ -25,6 +27,7 @@ class LegalMovesMixin:
         'left': np.asarray([0, -1])
     }
 
+
 class GridTown(LegalMovesMixin):
     A = 1
     B = 2
@@ -36,8 +39,7 @@ class GridTown(LegalMovesMixin):
         'exited': -1
     }
 
-    def __init__(self, size=(4, 4), init_pos_a=(0, 0), init_pos_b=(1, 1), init_pos_p=(3, 3),
-                 policy=None):
+    def __init__(self, size=(4, 4), init_pos_a=(0, 0), init_pos_b=(1, 1), init_pos_p=(3, 3)):
         self.init_pos_a = init_pos_a
         self.init_pos_b = init_pos_b
         self.init_pos_p = init_pos_p
@@ -182,9 +184,12 @@ class QLearner(Policy, LegalMovesMixin):
         else:
             return self.get_move(pos_a, pos_p, actions)
 
-    def learn(self):
+    def learn(self, use_learning_rate=False):
+        num_q_update = np.zeros(self.q.shape)
         for episode in range(self.episodes):
             print('Episode: %d' % episode)
+            self.enviro.reset()
+            q_temp = self.q.copy()
             while True:
                 # get the move based on epsilong-greedy policy
                 states, moves = self.enviro.next_state_action(
@@ -205,11 +210,17 @@ class QLearner(Policy, LegalMovesMixin):
                 old_idx = state_to_idx([old_pos_a, old_pos_p])
 
                 update = reward + self.discount_factor * np.max(self.q[cur_idx] - self.q[old_idx])
-                self.q[old_idx][move_idx] += self.learning_rate * update
+                num_q_update[old_idx][move_idx] += 1
+                if not use_learning_rate:
+                    step_size = 1 / (num_q_update[old_idx][move_idx] ** (2/3.))
+                else:
+                    step_size = self.learning_rate
+                q_temp[old_idx][move_idx] += step_size * update
 
                 if game_result == GridTown.STATE_DICT['exited']:
                     break
-            self.enviro.reset()
+            self.q = q_temp
+
 
 def run(grid, policy):
     while True:
@@ -224,11 +235,9 @@ def run(grid, policy):
             break
 
 
-
-
 if __name__ == '__main__':
     grid = GridTown()
-    policy = QLearner(grid)
+    policy = QLearner(grid, episodes=int(1e4))
     policy.learn()
 
     run(grid, policy)
