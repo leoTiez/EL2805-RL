@@ -2,12 +2,13 @@
 import numpy as np
 from matplotlib import pyplot as plt
 
+def state_to_idx(list):
+    idx = ([])
+    for value in list:
+        idx += tuple(value)
+    return tuple(idx)
 
-class GridTown:
-    A = 1
-    B = 2
-    P = 3
-
+class LegalMovesMixin:
     MOVE_DICT_A = {
         'up': np.asarray([-1, 0]),
         'down': np.asarray([1, 0]),
@@ -23,6 +24,12 @@ class GridTown:
         'right': np.asarray([0, 1]),
         'left': np.asarray([0, -1])
     }
+
+class GridTown(LegalMovesMixin):
+    A = 1
+    B = 2
+    P = 3
+
 
     STATE_DICT = {
         'running': 0,
@@ -41,7 +48,6 @@ class GridTown:
         self.pos_b = init_pos_b
         self.pos_p = init_pos_p
         self.cumulative_reward = 0
-        self.policy = policy
         self.reset()
 
     def reset(self):
@@ -70,7 +76,7 @@ class GridTown:
         out_of_lower_bound = state_indices[0] >= grid_size[0]
         return out_of_left_bound, out_of_right_bound, out_of_upper_bound, out_of_lower_bound
 
-    def _next_state_action(self, state, is_a=False):
+    def next_state_action(self, state, is_a=False):
         next_states = []
         next_actions = []
 
@@ -79,42 +85,25 @@ class GridTown:
         else:
             move_dict = GridTown.MOVE_DICT_B
 
-        for move in move_dict.values():
-            if move is None:
-                next_states.append(None)
-                next_actions.append(None)
+        for move in move_dict:
+            if move_dict[move] is None:
+                next_states.append(move_dict[move])
+                next_actions.append(move)
             else:
-                next_state = state + move
+                next_state = state + move_dict[move]
                 if self._is_in_bounds_all(next_state):
                     next_states.append(next_state)
                     next_actions.append(move)
         return next_states, next_actions
 
-    def run(self, plot_state=True):
-        if self.policy is None:
-            raise ValueError('Policy is none and should be set before')
-
-        while True:
-            game_result = self.next_state(plot_state=plot_state)
-            if game_result == GridTown.STATE_DICT['exited']:
-                break
-        return game_result
-
-    def next_state(self,  plot_state=False):
-        if self.policy is None:
-            raise ValueError('Policy is none and should be set before')
-
-        # Calculate move of a
-        _, next_actions = self._next_state_action(self.pos_a, is_a=True)
-        move = self.policy.get_move(self.pos_a, self.pos_p, next_actions)
-
-        if move is None:
+    def next_state(self, move,  plot_state=False):
+        if move == 'exit':
             return GridTown.STATE_DICT['exited'], 0
         else:
-            next_a = self.pos_a + move
+            next_a = self.pos_a + GridTown.MOVE_DICT_A[move]
 
         # Calculate move of police (p)
-        next_states_p, _ = self._next_state_action(self.pos_p, is_a=False)
+        next_states_p, _ = self.next_state_action(self.pos_p, is_a=False)
         pick_move = np.random.randint(0, len(next_states_p))
         next_p = next_states_p[pick_move]
 
@@ -154,7 +143,7 @@ class GridTown:
 
 
 class Policy:
-    def get_move(self, pos_a, pos_b, actions):
+    def get_move(self, pos_a, pos_p, actions):
         pass
 
 
@@ -162,42 +151,85 @@ class RandomPolicy(Policy):
     def get_move(self, pos_a, pos_p, actions):
         return actions[np.random.randint(0, len(actions))]
 
-class QLearner(Policy):
-    class QPolicy(Policy):
-        def __init__(self, q):
-            self.q = q
-
-        def get_move(self, pos_a, pos_p, actions):
-            np.self.q[pos_a[0], pos_a[1], pos_p[0], pos_p[1], ]
-
-    def __init__(self, learning_rate=0.1, epsilon=0.1, episodes=100):
-        self.q = None
+class QLearner(Policy, LegalMovesMixin):
+    def __init__(self, enviro, learning_rate=0.1, epsilon=0.5,
+                 episodes=int(1e5), discount_factor=0.8):
+        self.enviro = enviro
+        self.q = np.zeros(
+            state_to_idx([
+                enviro.size, enviro.size, [len(QLearner.MOVE_DICT_A.keys())]
+            ])
+        )
         self.learning_rate = learning_rate
         self.epsilon = epsilon
         self.episodes = episodes
+        self.discount_factor = discount_factor
 
-    def export_q(self):
-        return QLearner.QPolicy(self.q)
+        self.move_str_to_idx = {k: v for v, k in enumerate(QLearner.MOVE_DICT_A)}
 
-    def get_move(self, pos_a, pos_b, actions):
+    def get_move(self, pos_a, pos_p, actions):
+        moves = []
+        for a in actions:
+            idx = self.move_str_to_idx[a]
+            moves.append(self.q[pos_a[0], pos_a[1], pos_p[0], pos_p[1], idx])
+            return actions[np.argmax(moves)]
+
+    def get_epsilon_move(self, pos_a, pos_p, actions):
         """epsilon-greedy policy"""
-        pass
+        rand_val = np.random.uniform()
+        if rand_val <= self.epsilon:
+            return actions[np.random.randint(0, len(actions))]
+        else:
+            return self.get_move(pos_a, pos_p, actions)
 
-    def learn(self, enviro):
+    def learn(self):
         for episode in range(self.episodes):
+            print('Episode: %d' % episode)
             while True:
-                old_pos_a, old_pos_p = enviro.pos_a, enviro.pos_p
-                game_result, reward = self.enviro.next_state(plot_state=False)
-                self.q[old_pos_a, old_pos_p, act] += self.learning_rate * (
-                    reward + np.max(self.q[enviro.pos_a, enviro.pos_p, :] -
-                                    self.q[old_pos_a, old_pos_p, :]))
+                # get the move based on epsilong-greedy policy
+                states, moves = self.enviro.next_state_action(
+                    self.enviro.pos_a, is_a=True)
+                move = self.get_epsilon_move(
+                    self.enviro.pos_a, self.enviro.pos_p, moves
+                )
+
+                # save the old state s
+                old_pos_a, old_pos_p = self.enviro.pos_a, self.enviro.pos_p
+
+                # observe a reward from applying `move`
+                game_result, reward = self.enviro.next_state(move, plot_state=False)
+
+                # make the update
+                move_idx = self.move_str_to_idx[move]
+                cur_idx = state_to_idx([self.enviro.pos_a, self.enviro.pos_p])
+                old_idx = state_to_idx([old_pos_a, old_pos_p])
+
+                update = reward + self.discount_factor * np.max(self.q[cur_idx] - self.q[old_idx])
+                self.q[old_idx][move_idx] += self.learning_rate * update
+
                 if game_result == GridTown.STATE_DICT['exited']:
                     break
-            enviro.reset()
+            self.enviro.reset()
+
+def run(grid, policy):
+    while True:
+        _, actions = grid.next_state_action(grid.pos_a, is_a=True)
+        game_result, reward = grid.next_state(
+            policy.get_move(grid.pos_a, grid.pos_p, actions)
+        )
+        print('State: %s, reward: %d, total reward: %d' %
+            (game_result, reward, grid.cumulative_reward))
+
+        if game_result == GridTown.STATE_DICT['exited']:
+            break
+
+
+
 
 if __name__ == '__main__':
-    policy = RandomPolicy()
-    enviro = GridTown(policy=policy)
-    enviro.run(plot_state=True)
+    grid = GridTown()
+    policy = QLearner(grid)
+    policy.learn()
 
+    run(grid, policy)
 
