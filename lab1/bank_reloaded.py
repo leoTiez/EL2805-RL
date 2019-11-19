@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import numpy as np
 from matplotlib import pyplot as plt
 
@@ -29,11 +29,13 @@ class GridTown:
         'exited': -1
     }
 
-    def __init__(self, init_pos_a=(0, 0), init_pos_b=(1, 1), init_pos_p=(3, 3),
+    def __init__(self, size=(4, 4), init_pos_a=(0, 0), init_pos_b=(1, 1), init_pos_p=(3, 3),
                  policy=None):
         self.init_pos_a = init_pos_a
         self.init_pos_b = init_pos_b
         self.init_pos_p = init_pos_p
+        self.size = size
+        self.grid = None
 
         self.pos_a = init_pos_a
         self.pos_b = init_pos_b
@@ -43,7 +45,7 @@ class GridTown:
         self.reset()
 
     def reset(self):
-        self.grid = self._create_init_grid()
+        self.grid = self._create_init_grid(self.size)
         self.pos_a = self.init_pos_a
         self.pos_b = self.init_pos_b
         self.pos_p = self.init_pos_p
@@ -92,7 +94,6 @@ class GridTown:
         if self.policy is None:
             raise ValueError('Policy is none and should be set before')
 
-        game_result = -1
         while True:
             game_result = self.next_state(plot_state=plot_state)
             if game_result == GridTown.STATE_DICT['exited']:
@@ -100,7 +101,9 @@ class GridTown:
         return game_result
 
     def next_state(self,  plot_state=False):
-        """Assumed that `move` is a valid move for player a"""
+        if self.policy is None:
+            raise ValueError('Policy is none and should be set before')
+
         # Calculate move of a
         _, next_actions = self._next_state_action(self.pos_a, is_a=True)
         move = self.policy.get_move(self.pos_a, self.pos_p, next_actions)
@@ -111,22 +114,21 @@ class GridTown:
             next_a = self.pos_a + move
 
         # Calculate move of police (p)
-        next_moves_p, _ = self._next_state_action(self.pos_p, is_a=False)
-        pick_move = np.random.randint(0, len(next_moves_p))
-        next_p = next_moves_p[pick_move]
+        next_states_p, _ = self._next_state_action(self.pos_p, is_a=False)
+        pick_move = np.random.randint(0, len(next_states_p))
+        next_p = next_states_p[pick_move]
 
         # Reset previous position
         self.grid[self.pos_p[0], self.pos_p[1]] = 0
         self.grid[self.pos_a[0], self.pos_a[1]] = 0
 
-        # Set new position via collapsing maze
-        self.grid[next_p[0], next_p[1]] = GridTown.P
-
         # Set new positions
+        self.grid[next_p[0], next_p[1]] = GridTown.P
         self.grid[next_a[0], next_a[1]] = GridTown.A
+        self.grid[self.init_pos_b[0], self.init_pos_b[1]] = GridTown.B
 
         self.pos_a = next_a
-        self.pos_b = next_p
+        self.pos_p = next_p
 
         self.cumulative_reward += self.reward(self.pos_a, self.pos_p)
 
@@ -154,6 +156,7 @@ class Policy:
     def get_move(self, pos_a, pos_b, actions):
         pass
 
+
 class RandomPolicy(Policy):
     def get_move(self, pos_a, pos_p, actions):
         return actions[np.random.randint(0, len(actions))]
@@ -177,8 +180,10 @@ class RandomPolicy(Policy):
 #             grid.next_step
 #             grid._next_states
 #
-policy = RandomPolicy()
-enviro = GridTown(policy=policy)
 
-enviro.run(plot_state=True)
+
+if __name__ == '__main__':
+    policy = RandomPolicy()
+    enviro = GridTown(policy=policy)
+    enviro.run(plot_state=True)
 
