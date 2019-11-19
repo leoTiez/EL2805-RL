@@ -106,7 +106,7 @@ class GridTown:
         move = self.policy.get_move(self.pos_a, self.pos_p, next_actions)
 
         if move is None:
-            return GridTown.STATE_DICT['exited'], self.cumulative_reward
+            return GridTown.STATE_DICT['exited'], 0
         else:
             next_a = self.pos_a + move
 
@@ -128,12 +128,13 @@ class GridTown:
         self.pos_a = next_a
         self.pos_b = next_p
 
-        self.cumulative_reward += self.reward(self.pos_a, self.pos_p)
+        current_reward = self.reward(self.pos_a, self.pos_p)
+        self.cumulative_reward += current_reward
 
         if plot_state:
             self.plot_state()
 
-        return GridTown.STATE_DICT['running'], self.cumulative_reward
+        return GridTown.STATE_DICT['running'], current_reward
 
     def _create_init_grid(self, size=(4, 4)):
         grid = np.zeros(size)
@@ -154,31 +155,42 @@ class Policy:
     def get_move(self, pos_a, pos_b, actions):
         pass
 
+
 class RandomPolicy(Policy):
     def get_move(self, pos_a, pos_p, actions):
         return actions[np.random.randint(0, len(actions))]
-#
-# class QLearner:
-#
-#     class QPolicy(Policy):
-#
-#         def get_move(self, pos_a, pos_p, actions):
-#             return np.max(self.Q(next_states))
-#
-#
-#     def __init__(self):
-#         self.Q = []
-#
-#     def export_q(self):
-#         return Qlearner.QPolicy()
-#
-#     def learn(self, grid):
-#         for epoch in range(100000):
-#             grid.next_step
-#             grid._next_states
-#
-policy = RandomPolicy()
-enviro = GridTown(policy=policy)
 
-enviro.run(plot_state=True)
+
+class QLearner(Policy):
+    class QPolicy(Policy):
+        def __init__(self, q):
+            self.q = q
+
+        def get_move(self, pos_a, pos_p, actions):
+            np.self.q[pos_a[0], pos_a[1], pos_p[0], pos_p[1], ]
+
+    def __init__(self, learning_rate=0.1, epsilon=0.1, episodes=100):
+        self.q = None
+        self.learning_rate = learning_rate
+        self.epsilon = epsilon
+        self.episodes = episodes
+
+    def export_q(self):
+        return QLearner.QPolicy(self.q)
+
+    def get_move(self, pos_a, pos_b, actions):
+        """epsilon-greedy policy"""
+        pass
+
+    def learn(self, enviro):
+        for episode in range(self.episodes):
+            while True:
+                old_pos_a, old_pos_p = enviro.pos_a, enviro.pos_p
+                game_result, reward = self.enviro.next_state(plot_state=False)
+                self.q[old_pos_a, old_pos_p, act] += self.learning_rate * (
+                    reward + np.max(self.q[enviro.pos_a, enviro.pos_p, :] -
+                                    self.q[old_pos_a, old_pos_p, :]))
+                if game_result == GridTown.STATE_DICT['exited']:
+                    break
+            enviro.reset()
 
