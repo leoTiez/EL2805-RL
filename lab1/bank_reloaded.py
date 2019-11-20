@@ -16,8 +16,7 @@ class LegalMovesMixin:
         'down': np.asarray([1, 0]),
         'right': np.asarray([0, 1]),
         'left': np.asarray([0, -1]),
-        'stay': np.asarray([0, 0]),
-        'exit': None
+        'stay': np.asarray([0, 0])
     }
 
     MOVE_DICT_B = {
@@ -99,10 +98,7 @@ class GridTown(LegalMovesMixin):
         return next_states, next_actions
 
     def next_state(self, move,  plot_state=False):
-        if move == 'exit':
-            return GridTown.STATE_DICT['exited'], 0
-        else:
-            next_a = self.pos_a + GridTown.MOVE_DICT_A[move]
+        next_a = self.pos_a + GridTown.MOVE_DICT_A[move]
 
         # Calculate move of police (p)
         next_states_p, _ = self.next_state_action(self.pos_p, is_a=False)
@@ -153,9 +149,9 @@ class RandomPolicy(Policy):
     def get_move(self, pos_a, pos_p, actions):
         return actions[np.random.randint(0, len(actions))]
 
+
 class QLearner(Policy, LegalMovesMixin):
-    def __init__(self, enviro, learning_rate=0.1, epsilon=0.5,
-                 episodes=int(1e2), discount_factor=0.8):
+    def __init__(self, enviro, learning_rate=0.1, discount_factor=0.8):
         self.enviro = enviro
         self.q = np.zeros(
             state_to_idx([
@@ -163,8 +159,6 @@ class QLearner(Policy, LegalMovesMixin):
             ])
         )
         self.learning_rate = learning_rate
-        self.epsilon = epsilon
-        self.episodes = episodes
         self.discount_factor = discount_factor
 
         self.move_str_to_idx = {k: v for v, k in enumerate(QLearner.MOVE_DICT_A)}
@@ -184,55 +178,54 @@ class QLearner(Policy, LegalMovesMixin):
         else:
             return self.get_move(pos_a, pos_p, actions)
 
-    def learn(self, record_initial_q=False, use_learning_rate=False):
-        initial_q = []
+    def get_random_move(self, actions):
+        return actions[np.random.randint(0, len(actions))]
 
+    def learn(self, max_iterations=int(1e7), record_initial_q=False, use_learning_rate=False, plotting_freq=int(1e3)):
+        max_iterations = int(max_iterations)
+        plotting_freq = int(plotting_freq)
+
+        initial_q = []
         initial_idx = state_to_idx([self.enviro.init_pos_a,
                                     self.enviro.init_pos_p])
 
         num_q_update = np.zeros(self.q.shape)
 
-        for episode in range(self.episodes):
-            print('Episode: %d' % episode)
-            self.enviro.reset()
+        self.enviro.reset()
+
+        for time_step in range(max_iterations):
             # record the Q-function for the initial state of A
-            if record_initial_q:
+            if record_initial_q and time_step % plotting_freq == 0:
+                print(time_step)
                 initial_q.append(np.copy(self.q[initial_idx]))
-            q_temp = self.q.copy()
-            while True:
-                # get the move based on epsilon-greedy policy
-                states, moves = self.enviro.next_state_action(
-                    self.enviro.pos_a, is_a=True)
-                move = self.get_epsilon_move(
-                    self.enviro.pos_a, self.enviro.pos_p, moves
-                )
 
-                # save the old state s
-                old_pos_a, old_pos_p = self.enviro.pos_a, self.enviro.pos_p
+            # get the move based on epsilon-greedy policy
+            states, moves = self.enviro.next_state_action(
+                self.enviro.pos_a, is_a=True)
+            move = self.get_random_move(moves)
 
-                # observe a reward from applying `move`
-                game_result, reward = self.enviro.next_state(move, plot_state=False)
+            # save the old state s
+            old_pos_a, old_pos_p = self.enviro.pos_a, self.enviro.pos_p
 
-                # make the update
-                move_idx = self.move_str_to_idx[move]
-                cur_idx = state_to_idx([self.enviro.pos_a, self.enviro.pos_p])
-                old_idx = state_to_idx([old_pos_a, old_pos_p])
+            # observe a reward from applying `move`
+            game_result, reward = self.enviro.next_state(move, plot_state=False)
 
-                update = reward + self.discount_factor * np.max(self.q[cur_idx]) - self.q[old_idx][move_idx]
-                num_q_update[old_idx][move_idx] += 1
-                if not use_learning_rate:
-                    step_size = 1 / (num_q_update[old_idx][move_idx] ** (2/3.))
-                else:
-                    step_size = self.learning_rate
-                q_temp[old_idx][move_idx] += step_size * update
+            # make the update
+            move_idx = self.move_str_to_idx[move]
+            cur_idx = state_to_idx([self.enviro.pos_a, self.enviro.pos_p])
+            old_idx = state_to_idx([old_pos_a, old_pos_p])
 
-                if game_result == GridTown.STATE_DICT['exited']:
-                    break
-            self.q = q_temp
-
+            update = reward + self.discount_factor * np.max(self.q[cur_idx]) - self.q[old_idx][move_idx]
+            num_q_update[old_idx][move_idx] += 1
+            if not use_learning_rate:
+                step_size = 1 / (num_q_update[old_idx][move_idx] ** (2/3.))
+            else:
+                step_size = self.learning_rate
+            self.q[old_idx][move_idx] += step_size * update
 
         if record_initial_q:
             return initial_q
+
 
 def run(grid, policy):
     while True:
@@ -254,8 +247,13 @@ def plot_initial_q(initial_q):
 
 if __name__ == '__main__':
     grid = GridTown()
-    policy = QLearner(grid, episodes=int(5e5))
-    initial_q = policy.learn(record_initial_q=True, use_learning_rate=False)
+    policy = QLearner(grid)
+    initial_q = policy.learn(
+        max_iterations=1e7,
+        record_initial_q=True,
+        use_learning_rate=False,
+        plotting_freq=1e3
+    )
 
     plot_initial_q(initial_q)
 
