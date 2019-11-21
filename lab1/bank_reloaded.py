@@ -87,14 +87,10 @@ class GridTown(LegalMovesMixin):
             move_dict = GridTown.MOVE_DICT_B
 
         for move in move_dict:
-            if move_dict[move] is None:
-                next_states.append(move_dict[move])
+            next_state = state + move_dict[move]
+            if self._is_in_bounds_all(next_state):
+                next_states.append(next_state)
                 next_actions.append(move)
-            else:
-                next_state = state + move_dict[move]
-                if self._is_in_bounds_all(next_state):
-                    next_states.append(next_state)
-                    next_actions.append(move)
         return next_states, next_actions
 
     def next_state(self, move,  plot_state=False):
@@ -133,7 +129,6 @@ class GridTown(LegalMovesMixin):
 
         return grid
 
-
     def plot_state(self):
         plt.matshow(self.grid, cmap=plt.cm.cividis)
         plt.grid()
@@ -152,6 +147,7 @@ class RandomPolicy(Policy):
 
 class QLearner(Policy, LegalMovesMixin):
     def __init__(self, enviro, learning_rate=0.1, discount_factor=0.8):
+        self.epsilon = 0.5
         self.enviro = enviro
         self.q = np.zeros(
             state_to_idx([
@@ -168,7 +164,10 @@ class QLearner(Policy, LegalMovesMixin):
         for a in actions:
             idx = self.move_str_to_idx[a]
             moves.append(self.q[pos_a[0], pos_a[1], pos_p[0], pos_p[1], idx])
-            return actions[np.argmax(moves)]
+        return actions[np.argmax(moves)]
+
+    def get_random_move(self, actions):
+        return actions[np.random.randint(0, len(actions))]
 
     def get_epsilon_move(self, pos_a, pos_p, actions):
         """epsilon-greedy policy"""
@@ -177,9 +176,6 @@ class QLearner(Policy, LegalMovesMixin):
             return actions[np.random.randint(0, len(actions))]
         else:
             return self.get_move(pos_a, pos_p, actions)
-
-    def get_random_move(self, actions):
-        return actions[np.random.randint(0, len(actions))]
 
     def learn(self, max_iterations=int(1e7), record_initial_q=False, use_learning_rate=False, plotting_freq=int(1e3)):
         max_iterations = int(max_iterations)
@@ -190,7 +186,6 @@ class QLearner(Policy, LegalMovesMixin):
                                     self.enviro.init_pos_p])
 
         num_q_update = np.zeros(self.q.shape)
-
         self.enviro.reset()
 
         for time_step in range(max_iterations):
@@ -208,7 +203,7 @@ class QLearner(Policy, LegalMovesMixin):
             old_pos_a, old_pos_p = self.enviro.pos_a, self.enviro.pos_p
 
             # observe a reward from applying `move`
-            game_result, reward = self.enviro.next_state(move, plot_state=False)
+            _, reward = self.enviro.next_state(move, plot_state=False)
 
             # make the update
             move_idx = self.move_str_to_idx[move]
@@ -228,6 +223,7 @@ class QLearner(Policy, LegalMovesMixin):
 
 
 def run(grid, policy):
+    grid.reset()
     while True:
         _, actions = grid.next_state_action(grid.pos_a, is_a=True)
         game_result, reward = grid.next_state(
@@ -239,13 +235,15 @@ def run(grid, policy):
         if game_result == GridTown.STATE_DICT['exited']:
             break
 
+
 def plot_initial_q(initial_q):
     initial_q = np.asarray(initial_q)
     plt.plot(initial_q)
     plt.legend(LegalMovesMixin.MOVE_DICT_A.keys())
     plt.show()
 
-if __name__ == '__main__':
+
+def main():
     grid = GridTown()
     policy = QLearner(grid)
     initial_q = policy.learn(
@@ -258,4 +256,8 @@ if __name__ == '__main__':
     plot_initial_q(initial_q)
 
     run(grid, policy)
+
+
+if __name__ == '__main__':
+    main()
 
