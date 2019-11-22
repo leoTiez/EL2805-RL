@@ -146,8 +146,8 @@ class RandomPolicy(Policy):
 
 
 class QLearner(Policy, LegalMovesMixin):
-    def __init__(self, enviro, learning_rate=0.1, discount_factor=0.8):
-        self.epsilon = 0.5
+    def __init__(self, enviro, learning_rate=0.1, discount_factor=0.8,
+                 epsilon=0.1):
         self.enviro = enviro
         self.q = np.zeros(
             state_to_idx([
@@ -156,6 +156,7 @@ class QLearner(Policy, LegalMovesMixin):
         )
         self.learning_rate = learning_rate
         self.discount_factor = discount_factor
+        self.epsilon = epsilon
 
         self.move_str_to_idx = {k: v for v, k in enumerate(QLearner.MOVE_DICT_A)}
 
@@ -222,6 +223,69 @@ class QLearner(Policy, LegalMovesMixin):
             return initial_q
 
 
+class SARSALearner(QLearner):
+    def __init__(self, enviro, learning_rate=0.1, discount_factor=0.8,
+                 epsilon=0.1):
+        super(SARSALearner, self).__init__(enviro, learning_rate,
+                                           discount_factor, epsilon)
+
+    def learn(self, max_iterations=int(1e7), record_initial_q=False, use_learning_rate=False, plotting_freq=int(1e3)):
+        max_iterations = int(max_iterations)
+        plotting_freq = int(plotting_freq)
+
+        initial_q = []
+        initial_idx = state_to_idx([self.enviro.init_pos_a,
+                                    self.enviro.init_pos_p])
+
+        num_q_update = np.zeros(self.q.shape)
+
+        self.enviro.reset()
+
+        _, moves = self.enviro.next_state_action(self.enviro.pos_a, is_a=True)
+
+        move = self.get_epsilon_move(self.enviro.pos_a, self.enviro.pos_p, moves)
+
+        for time_step in range(max_iterations):
+            self.epsilon = 1.0 / (time_step + 1)
+            # record the Q-function for the initial state of A
+            if record_initial_q and time_step % plotting_freq == 0:
+                print(time_step)
+                initial_q.append(np.copy(self.q[initial_idx]))
+
+            # save the old state s
+            old_pos_a, old_pos_p = self.enviro.pos_a, self.enviro.pos_p
+
+            # observe a reward from applying `move`
+            game_result, reward = self.enviro.next_state(move, plot_state=False)
+
+            # get the move based on epsilon-greedy policy
+            _, moves = self.enviro.next_state_action(
+                self.enviro.pos_a, is_a=True)
+
+            move_prime = self.get_epsilon_move(self.enviro.pos_a,
+                                               self.enviro.pos_p, moves)
+
+            # make the update
+            move_idx = self.move_str_to_idx[move]
+            move_prime_idx = self.move_str_to_idx[move_prime]
+            cur_idx = state_to_idx([self.enviro.pos_a, self.enviro.pos_p])
+            old_idx = state_to_idx([old_pos_a, old_pos_p])
+
+            update = reward + self.discount_factor * self.q[cur_idx][move_prime_idx] - \
+                     self.q[old_idx][move_idx]
+            num_q_update[old_idx][move_idx] += 1
+
+            if not use_learning_rate:
+                step_size = 1 / (num_q_update[old_idx][move_idx] ** (2 / 3.))
+            else:
+                step_size = self.learning_rate
+
+            self.q[old_idx][move_idx] += step_size * update
+            move = move_prime
+
+        if record_initial_q:
+            return initial_q
+
 def run(grid, policy):
     grid.reset()
     while True:
@@ -245,12 +309,12 @@ def plot_initial_q(initial_q):
 
 def main():
     grid = GridTown()
-    policy = QLearner(grid)
+    policy = SARSALearner(grid, epsilon=0.1)
     initial_q = policy.learn(
-        max_iterations=1e7,
+        max_iterations=int(1e6),
         record_initial_q=True,
-        use_learning_rate=False,
-        plotting_freq=1e3
+        use_learning_rate=True,
+        plotting_freq=int(1e2)
     )
 
     plot_initial_q(initial_q)
