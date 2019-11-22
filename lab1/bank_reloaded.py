@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import numpy as np
 from matplotlib import pyplot as plt
+from os import makedirs
 
 
 def state_to_idx(list):
@@ -38,7 +39,8 @@ class GridTown(LegalMovesMixin):
         'exited': -1
     }
 
-    def __init__(self, size=(4, 4), init_pos_a=(0, 0), init_pos_b=(1, 1), init_pos_p=(3, 3)):
+    def __init__(self, size=(4, 4), init_pos_a=(0, 0), init_pos_b=(1, 1),
+                 init_pos_p=(3, 3), save_name=None):
         self.init_pos_a = init_pos_a
         self.init_pos_b = init_pos_b
         self.init_pos_p = init_pos_p
@@ -49,6 +51,7 @@ class GridTown(LegalMovesMixin):
         self.pos_b = init_pos_b
         self.pos_p = init_pos_p
         self.cumulative_reward = 0
+        self.save_name = save_name
         self.reset()
 
     def reset(self):
@@ -93,7 +96,7 @@ class GridTown(LegalMovesMixin):
                 next_actions.append(move)
         return next_states, next_actions
 
-    def next_state(self, move,  plot_state=False):
+    def next_state(self, move,  plot_state=False, move_num=1):
         next_a = self.pos_a + GridTown.MOVE_DICT_A[move]
 
         # Calculate move of police (p)
@@ -116,7 +119,9 @@ class GridTown(LegalMovesMixin):
         current_reward = self.reward(self.pos_a, self.pos_p)
         self.cumulative_reward += current_reward
 
-        if plot_state:
+        if plot_state and self.save_name:
+            self.plot_state(self.save_name + '/' + str(move_num) + '.png')
+        elif plot_state:
             self.plot_state()
 
         return GridTown.STATE_DICT['running'], current_reward
@@ -129,10 +134,14 @@ class GridTown(LegalMovesMixin):
 
         return grid
 
-    def plot_state(self):
+    def plot_state(self, save_name=None):
         plt.matshow(self.grid, cmap=plt.cm.cividis)
         plt.grid()
-        plt.show()
+        if save_name is not None:
+            makedirs(self.save_name, exist_ok=True)
+            plt.savefig(save_name)
+        else:
+            plt.show()
 
 
 class Policy:
@@ -204,7 +213,8 @@ class QLearner(Policy, LegalMovesMixin):
             old_pos_a, old_pos_p = self.enviro.pos_a, self.enviro.pos_p
 
             # observe a reward from applying `move`
-            _, reward = self.enviro.next_state(move, plot_state=False)
+            _, reward = self.enviro.next_state(move, plot_state=False,
+                                               move_num=time_step)
 
             # make the update
             move_idx = self.move_str_to_idx[move]
@@ -229,7 +239,9 @@ class SARSALearner(QLearner):
         super(SARSALearner, self).__init__(enviro, learning_rate,
                                            discount_factor, epsilon)
 
-    def learn(self, max_iterations=int(1e7), record_initial_q=False, use_learning_rate=False, plotting_freq=int(1e3)):
+    def learn(self, max_iterations=int(1e7), record_initial_q=False,
+              use_learning_rate=False, plotting_freq=int(1e3),
+              use_adapting_epsilon=False):
         max_iterations = int(max_iterations)
         plotting_freq = int(plotting_freq)
 
@@ -246,7 +258,8 @@ class SARSALearner(QLearner):
         move = self.get_epsilon_move(self.enviro.pos_a, self.enviro.pos_p, moves)
 
         for time_step in range(max_iterations):
-            self.epsilon = 1.0 / (time_step + 1)
+            if use_adapting_epsilon:
+                self.epsilon = 1.0 / (time_step + 1)
             # record the Q-function for the initial state of A
             if record_initial_q and time_step % plotting_freq == 0:
                 print(time_step)
@@ -256,7 +269,9 @@ class SARSALearner(QLearner):
             old_pos_a, old_pos_p = self.enviro.pos_a, self.enviro.pos_p
 
             # observe a reward from applying `move`
-            game_result, reward = self.enviro.next_state(move, plot_state=False)
+            game_result, reward = self.enviro.next_state(move,
+                                                         plot_state=False,
+                                                         move_num=time_step)
 
             # get the move based on epsilon-greedy policy
             _, moves = self.enviro.next_state_action(
@@ -286,42 +301,98 @@ class SARSALearner(QLearner):
         if record_initial_q:
             return initial_q
 
-def run(grid, policy):
+def run(grid, policy, max_iters=None, plot_state=False):
     grid.reset()
+    iters = 0
     while True:
+        if max_iters is not None and iters > max_iters:
+            return
         _, actions = grid.next_state_action(grid.pos_a, is_a=True)
         game_result, reward = grid.next_state(
-            policy.get_move(grid.pos_a, grid.pos_p, actions)
+            policy.get_move(grid.pos_a, grid.pos_p, actions),
+            move_num=iters, plot_state=plot_state
         )
         print('State: %s, reward: %d, total reward: %d' %
             (game_result, reward, grid.cumulative_reward))
 
         if game_result == GridTown.STATE_DICT['exited']:
             break
+        iters += 1
 
 
-def plot_initial_q(initial_q):
+def plot_initial_q(initial_q, save_name=None):
     initial_q = np.asarray(initial_q)
+    plt.figure()
     plt.plot(initial_q)
     plt.legend(LegalMovesMixin.MOVE_DICT_A.keys())
-    plt.show()
+    if save_name:
+        plt.savefig(save_name)
+    else:
+        plt.show()
 
 
-def main():
+def main_sarsa():
+    for epsilon in [0.1, 0.3, 0.7]:
+        grid = GridTown()
+        policy = SARSALearner(grid, epsilon=epsilon)
+        initial_q = policy.learn(
+            max_iterations=int(1e7),
+            record_initial_q=True,
+            use_learning_rate=True,
+            plotting_freq=int(1e4),
+            use_adapting_epsilon=False
+        )
+
+        grid.save_name = 'sarsa_epsilon_%.2f' % epsilon
+
+        run(grid, policy, max_iters=20, plot_state=True)
+        print('Cumulative reward for epsilon = %f is %d' %
+              (epsilon, grid.cumulative_reward))
+
+        plot_initial_q(initial_q, grid.save_name +
+                       '/initial_q_sarsa_epsilon.png')
+
+
     grid = GridTown()
-    policy = SARSALearner(grid, epsilon=0.1)
+    policy = SARSALearner(grid)
     initial_q = policy.learn(
-        max_iterations=int(1e6),
+        max_iterations=int(1e7),
         record_initial_q=True,
         use_learning_rate=True,
-        plotting_freq=int(1e2)
+        plotting_freq=int(1e4),
+        use_adapting_epsilon=True
     )
 
-    plot_initial_q(initial_q)
+    grid.save_name = 'sarsa_adaptive_epsilon'
 
-    run(grid, policy)
+
+    run(grid, policy, max_iters=20, plot_state=True)
+    print('Cumulative reward for epsilon = 1/t is %d' %
+          grid.cumulative_reward)
+    plot_initial_q(initial_q, grid.save_name + '/initial_q_sarsa_adaptive.png')
+
+
+
+def main_q():
+    grid = GridTown()
+    policy = QLearner(grid)
+    initial_q = policy.learn(
+        max_iterations=int(1e7),
+        record_initial_q=True,
+        use_learning_rate=False,
+        plotting_freq=int(1e4)
+    )
+
+    grid.save_name = 'q'
+
+
+    run(grid, policy, max_iters=20, plot_state=True)
+    plot_initial_q(initial_q, grid.save_name + '/initial_q_qlearning.png')
+
+
 
 
 if __name__ == '__main__':
-    main()
+    main_q()
+    main_sarsa()
 
