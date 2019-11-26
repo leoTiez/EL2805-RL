@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 import numpy as np
 from matplotlib import pyplot as plt
+from os import makedirs
 
 
 class Maze:
@@ -34,7 +35,9 @@ class Maze:
             init_pos_a=[0, 0],
             init_pos_b=[6, 5],
             goal_state=[6, 5],
+            time_horizon=20,
             wall_mask=None,
+            allow_b_stay=False,
             verbosity=1
     ):
         self.init_pos_a = np.asarray(init_pos_a)
@@ -43,10 +46,14 @@ class Maze:
         self.pos_a = np.asarray(init_pos_a)
         self.pos_b = np.asarray(init_pos_b)
         self.goal_state = np.asarray(goal_state)
+        self.time_horizon = time_horizon
         self.wall_mask = wall_mask
         self.policy = None
         self.verbosity = verbosity
         self.maze = self._create_maze()
+        self.move_dict_b = Maze.MOVE_DICT_B.copy()
+        if allow_b_stay:
+            self.move_dict_b['stay'] = np.asarray([0, 0])
 
     def reset(self):
         self.pos_a = self.init_pos_a
@@ -63,7 +70,7 @@ class Maze:
         if is_a:
             move_dict = Maze.MOVE_DICT_A
         else:
-            move_dict = Maze.MOVE_DICT_B
+            move_dict = self.move_dict_b
 
         for move in move_dict.values():
             next_state = state + move
@@ -79,9 +86,9 @@ class Maze:
         return self._next_state(state_a, maze, is_a=True)
 
     def _next_move_b(self, state_b, maze):
-        return self._next_state(state_b, maze, is_a=False)
+        return self._next_state(state_b, maze)
 
-    def next_state(self, move, plot_state=True):
+    def next_state(self, move, plot_state=True, save_fig=False, iter=0):
         """Assumed that `move` is a valid move for player a"""
         # Calculate move of a
         next_a = self.pos_a + move
@@ -108,7 +115,7 @@ class Maze:
         is_prev_stay = np.all(move == np.asarray([0, 0]))
 
         if plot_state:
-            self.plot_state()
+            self.plot_state(save_fig, iter)
 
         if (not is_at_goal and is_at_same_pos) or \
                 (is_at_goal and is_at_same_pos and not is_prev_stay):
@@ -133,10 +140,15 @@ class Maze:
         else:
             return Maze.STATE_DICT['running']
 
-    def plot_state(self):
+    def plot_state(self, save_fig=False, iter=0):
+        plt.figure()
         plt.matshow(self.maze, cmap=plt.cm.cividis)
         plt.grid()
-        plt.show()
+        if save_fig:
+            makedirs('plots', exist_ok=True)
+            plt.savefig('plots/%d.png' % iter)
+        else:
+            plt.show()
 
     @staticmethod
     def _stopping_criterion(value_diff, precision, surviving_p):
@@ -194,24 +206,6 @@ class Maze:
 
 
 class MazeFiniteHorizon(Maze):
-    def __init__(
-            self,
-            size=(7, 8),
-            init_pos_a=[0, 0],
-            init_pos_b=[6, 5],
-            goal_state=[6, 5],
-            time_horizon=20,
-            wall_mask=None
-    ):
-        self.time_horizon = time_horizon
-        super(MazeFiniteHorizon, self).__init__(
-            size=size,
-            init_pos_a=init_pos_a,
-            init_pos_b=init_pos_b,
-            goal_state=goal_state,
-            wall_mask=wall_mask
-        )
-
     def learn(self):
         u = np.zeros(self.maze_size + self.maze_size)
         pi = np.zeros(self.maze_size + self.maze_size + (2,), dtype='int64')
@@ -228,7 +222,7 @@ class MazeFiniteHorizon(Maze):
 
         return pi
 
-    def run(self, plot_state=True):
+    def run(self, plot_state=True, save_fig=False):
         if self.policy is None:
             raise ValueError('Policy is none and should be set before')
 
@@ -237,7 +231,9 @@ class MazeFiniteHorizon(Maze):
             game_result = self.next_state(
                 self.policy[self.pos_a[0], self.pos_a[1],
                             self.pos_b[0], self.pos_b[1]],
-                plot_state=plot_state
+                plot_state=plot_state,
+                save_fig=save_fig,
+                iter=i
             )
             if game_result == Maze.STATE_DICT['losing'] or game_result == Maze.STATE_DICT['winning']:
                 break
@@ -261,18 +257,22 @@ class MazeInfiniteHorizon(Maze):
 
         return pi
 
-    def run(self, plot_state=True):
+    def run(self, plot_state=True, save_fig=False):
         if self.policy is None:
             raise ValueError('Policy is none and should be set before')
 
-        while True:
+        game_result = Maze.STATE_DICT['running']
+        for t in range(self.time_horizon):
             game_result = self.next_state(
                 self.policy[self.pos_a[0], self.pos_a[1],
                             self.pos_b[0], self.pos_b[1]],
-                plot_state=plot_state
+                plot_state=plot_state,
+                save_fig=save_fig,
+                iter=t
             )
             if game_result == Maze.STATE_DICT['losing'] or game_result == Maze.STATE_DICT['winning']:
                 break
+
         return game_result
 
 
@@ -287,7 +287,27 @@ def main_comparison():
     assert np.all(finite_policy == infinite_policy)
 
 
-def main(is_finite=True, is_plotting=True):
+def main_infinite(num_of_trials=1e5, g_mean=30):
+    maze = MazeInfiniteHorizon(verbosity=0)
+    policy = maze.learn(29/30., precision=1)
+    maze.set_policy(policy)
+
+    losses, wins, draws = 0, 0, 0
+    num_of_trials = int(num_of_trials)
+    for trial in range(num_of_trials):
+        maze.reset()
+        time_horizon = np.random.geometric(1/float(g_mean))
+        maze.time_horizon = time_horizon
+        res = maze.run(plot_state=False)
+        losses, wins, draws = analyzing_state(res, losses, wins, draws)
+
+    print('wins %d draws %d losses %d' % (wins, draws, losses))
+    print('wins %f draws %f losses %f' % (wins / num_of_trials, draws / num_of_trials,
+                                          losses / num_of_trials))
+
+
+def main(trials=1e5, is_finite=True, is_plotting=False, save_fig=False):
+    trials = int(trials)
     if is_finite:
         maze = MazeFiniteHorizon(time_horizon=20)
         policy = maze.learn()
@@ -296,24 +316,71 @@ def main(is_finite=True, is_plotting=True):
         policy = maze.learn(29/30., precision=1)
 
     maze.set_policy(policy)
-    trials = 10000
 
     wins = 0
     draws = 0
     losses = 0
 
     for i in range(trials):
-        res = maze.run(plot_state=is_plotting)
-        if res == Maze.STATE_DICT['winning']:
-            wins += 1
-        elif res == Maze.STATE_DICT['running']:
-            draws += 1
-        elif res == Maze.STATE_DICT['losing']:
-            losses += 1
         maze.reset()
+        res = maze.run(plot_state=is_plotting, save_fig=save_fig)
+        losses, wins, draws = analyzing_state(res, losses, wins, draws)
     print('wins %d draws %d losses %d' % (wins, draws, losses))
     print('wins %f draws %f losses %f' % (wins / trials, draws / trials,
                                           losses / trials))
+
+
+def analyzing_state(res, losses, wins, draws):
+    if res == Maze.STATE_DICT['winning']:
+        wins += 1
+    elif res == Maze.STATE_DICT['running']:
+        draws += 1
+    elif res == Maze.STATE_DICT['losing']:
+        losses += 1
+
+    return losses, wins, draws
+
+
+def plot_max_prob(min_time_horizon=10, max_time_horizon=23, num_runs=1000, save_plot=False):
+    win_ratio = []
+    win_ratio_stay = []
+    time_horizon_list = range(min_time_horizon, max_time_horizon)
+    for time_horizon in time_horizon_list:
+        maze = MazeFiniteHorizon(time_horizon=time_horizon)
+        policy = maze.learn()
+        maze.set_policy(policy)
+
+        maze_stay = MazeFiniteHorizon(time_horizon=time_horizon, allow_b_stay=True)
+        policy_stay = maze_stay.learn()
+        maze_stay.set_policy(policy_stay)
+
+        losses, wins, draws = 0, 0, 0
+        losses_stay, wins_stay, draws_stay = 0, 0, 0
+        print('\nTime horizon', time_horizon)
+        for _ in range(num_runs):
+            maze.reset()
+            maze_stay.reset()
+            res = maze.run(plot_state=False)
+            if res == -1:
+                maze.plot_state()
+            res_stay = maze_stay.run(plot_state=False)
+            losses, wins, draws = analyzing_state(res, losses, wins, draws)
+            losses_stay, wins_stay, draws_stay = analyzing_state(res_stay, losses_stay, wins_stay, draws_stay)
+
+        win_ratio.append(wins / float(num_runs))
+        win_ratio_stay.append(wins_stay / float(num_runs))
+        print('No stay', wins / float(num_runs))
+        print('Stay', wins_stay / float(num_runs))
+
+    plt.figure()
+    plt.plot(time_horizon_list, win_ratio)
+    plt.plot(time_horizon_list, win_ratio_stay)
+    plt.legend(['without stay move', 'with_stay_move'])
+
+    if not save_plot:
+        plt.show()
+    else:
+        plt.savefig('max_prob_exit_over_time.png')
 
 
 def test_maze_finite(is_plotting=True):
@@ -354,8 +421,9 @@ def test_maze_finite(is_plotting=True):
 
 
 if __name__ == '__main__':
-    # test_maze_finite(is_plotting=False)
-    main_comparison()
-    main(is_finite=True, is_plotting=False)
-    main(is_finite=False, is_plotting=False)
+    main_infinite()
+    # plot_max_prob(min_time_horizon=10, save_plot=True)
+    # main_comparison()
+    # main(trials=1, is_finite=True, is_plotting=True, save_fig=True)
+    # main(is_finite=False, is_plotting=False)
 
