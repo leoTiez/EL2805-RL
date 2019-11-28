@@ -128,14 +128,18 @@ class Maze:
     def set_policy(self, policy):
         self.policy = policy
 
-    def reward(self, state_a, state_b):
+    def reward(self, state_a, state_b, action):
         if state_b is None:
             return Maze.STATE_DICT['winning']
         has_eaten = np.all(state_a == state_b)
         in_goal = np.all(state_a == self.goal_state)
+        in_goal_next = np.all(np.asarray(state_a) + action == self.goal_state)
+
         if has_eaten and not in_goal:
             return Maze.STATE_DICT['losing']
         elif in_goal:
+            return Maze.STATE_DICT['running']
+        elif in_goal_next:
             return Maze.STATE_DICT['winning']
         else:
             return Maze.STATE_DICT['running']
@@ -165,7 +169,9 @@ class Maze:
                 summed_reward_over_states += p * value[sa[0], sa[1], sb[0], sb[1]]
 
             summed_reward_over_states *= surviving_p
-            summed_reward_over_states += self.reward(state_ind[:2], state_ind[2:])
+            action = sa - np.asarray(state_ind[0:2])
+            summed_reward_over_states += self.reward(state_ind[:2],
+                                                     state_ind[2:], action)
             next_rewards.append(summed_reward_over_states)
 
         new_value = np.max(next_rewards)
@@ -207,18 +213,21 @@ class Maze:
 
 class MazeFiniteHorizon(Maze):
     def learn(self):
-        u = np.zeros(self.maze_size + self.maze_size)
-        pi = np.zeros(self.maze_size + self.maze_size + (2,), dtype='int64')
+        u = np.zeros((self.time_horizon,) + self.maze_size + self.maze_size)
+        pi = np.zeros((self.time_horizon,) + self.maze_size + self.maze_size + (
+            2,), dtype='int64')
 
-        u[self.goal_state[0], self.goal_state[1], :, :] = self.reward(self.goal_state, None)
+        # u[self.time_horizon - 1, self.goal_state[0], self.goal_state[1], :, :] = self.reward(
+        #     self.goal_state, None)
 
         for t in range(self.time_horizon - 1, 0, -1):
-            u_t = np.copy(u)
-            for state_ind in np.ndindex(u.shape):
-                u_t[state_ind], best_move_a = self._compute_value(state_ind, u)
-                if t == 1:
-                    pi[state_ind] = best_move_a
-            u = u_t
+            # u_t = np.copy(u)
+            for state_ind in np.ndindex(u[t].shape):
+                u[t - 1][state_ind], best_move_a = self._compute_value(
+                    state_ind, u[t]
+                )
+                pi[t - 1][state_ind] = best_move_a
+            # u = u_t
 
         return pi
 
@@ -229,7 +238,7 @@ class MazeFiniteHorizon(Maze):
         game_result = -1
         for i in range(self.time_horizon):
             game_result = self.next_state(
-                self.policy[self.pos_a[0], self.pos_a[1],
+                self.policy[i, self.pos_a[0], self.pos_a[1],
                             self.pos_b[0], self.pos_b[1]],
                 plot_state=plot_state,
                 save_fig=save_fig,
@@ -341,7 +350,8 @@ def analyzing_state(res, losses, wins, draws):
     return losses, wins, draws
 
 
-def plot_max_prob(min_time_horizon=10, max_time_horizon=23, num_runs=1000, save_plot=False):
+def plot_max_prob(min_time_horizon=10, max_time_horizon=35, num_runs=1000,
+                  save_plot=False):
     win_ratio = []
     win_ratio_stay = []
     time_horizon_list = range(min_time_horizon, max_time_horizon)
@@ -362,7 +372,7 @@ def plot_max_prob(min_time_horizon=10, max_time_horizon=23, num_runs=1000, save_
             maze_stay.reset()
             res = maze.run(plot_state=False)
             if res == -1:
-                maze.plot_state()
+                maze.plot_state(save_fig=save_plot)
             res_stay = maze_stay.run(plot_state=False)
             losses, wins, draws = analyzing_state(res, losses, wins, draws)
             losses_stay, wins_stay, draws_stay = analyzing_state(res_stay, losses_stay, wins_stay, draws_stay)
@@ -421,9 +431,10 @@ def test_maze_finite(is_plotting=True):
 
 
 if __name__ == '__main__':
-    main_infinite()
-    # plot_max_prob(min_time_horizon=10, save_plot=True)
+    # test_maze_finite()
+    # main_infinite()
+    plot_max_prob(min_time_horizon=12, save_plot=True)
     # main_comparison()
-    # main(trials=1, is_finite=True, is_plotting=True, save_fig=True)
+    # main(trials=900, is_finite=True, is_plotting=False, save_fig=False)
     # main(is_finite=False, is_plotting=False)
 
