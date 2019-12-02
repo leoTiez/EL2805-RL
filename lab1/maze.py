@@ -212,7 +212,7 @@ class Maze:
 
 
 class MazeFiniteHorizon(Maze):
-    def learn(self):
+    def learn(self, return_value_func=False):
         u = np.zeros((self.time_horizon,) + self.maze_size + self.maze_size)
         pi = np.zeros((self.time_horizon,) + self.maze_size + self.maze_size + (
             2,), dtype='int64')
@@ -229,6 +229,8 @@ class MazeFiniteHorizon(Maze):
                 pi[t - 1][state_ind] = best_move_a
             # u = u_t
 
+        if return_value_func:
+            return u[0, 0, 0, 6, 5]
         return pi
 
     def run(self, plot_state=True, save_fig=False):
@@ -318,7 +320,7 @@ def main_infinite(num_of_trials=1e5, g_mean=30):
 def main(trials=1e5, is_finite=True, is_plotting=False, save_fig=False):
     trials = int(trials)
     if is_finite:
-        maze = MazeFiniteHorizon(time_horizon=20)
+        maze = MazeFiniteHorizon(time_horizon=16, allow_b_stay=True)
         policy = maze.learn()
     else:
         maze = MazeInfiniteHorizon()
@@ -429,12 +431,22 @@ def test_maze_finite(is_plotting=True):
     print('wins %f draws %f losses %f' % (wins / trials, draws / trials,
                                           losses / trials))
 
+def main_plot_value_function():
+    vals = []
+    xs = list(range(14, 15))
+    for i in xs:
+        maze = MazeFiniteHorizon(time_horizon=i, allow_b_stay=True)
+        vals.append(maze.learn(return_value_func=True))
+    plt.figure()
+    plt.plot(xs, vals)
+    plt.show()
 
 if __name__ == '__main__':
     # test_maze_finite()
     # main_infinite()
-    plot_max_prob(min_time_horizon=12, save_plot=True)
+    #plot_max_prob(min_time_horizon=12, save_plot=True, max_time_horizon=50)
     # main_comparison()
-    # main(trials=900, is_finite=True, is_plotting=False, save_fig=False)
+    #main(trials=1, is_finite=True, is_plotting=False, save_fig=False)
     # main(is_finite=False, is_plotting=False)
+    main_plot_value_function()
 
