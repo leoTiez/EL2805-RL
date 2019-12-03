@@ -230,7 +230,7 @@ class MazeFiniteHorizon(Maze):
             # u = u_t
 
         if return_value_func:
-            return u[0, 0, 0, 6, 5]
+            return u[0, self.init_pos_a[0], self.init_pos_a[1], self.init_pos_b[0], self.init_pos_b[1]]
         return pi
 
     def run(self, plot_state=True, save_fig=False):
