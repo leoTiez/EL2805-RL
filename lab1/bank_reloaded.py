@@ -258,8 +258,6 @@ class SARSALearner(QLearner):
         move = self.get_epsilon_move(self.enviro.pos_a, self.enviro.pos_p, moves)
 
         for time_step in range(max_iterations):
-            if use_adapting_epsilon:
-                self.epsilon = 1.0 / (time_step + 1)
             # record the Q-function for the initial state of A
             if record_initial_q and time_step % plotting_freq == 0:
                 print(time_step)
@@ -267,11 +265,18 @@ class SARSALearner(QLearner):
 
             # save the old state s
             old_pos_a, old_pos_p = self.enviro.pos_a, self.enviro.pos_p
+            old_idx = state_to_idx([old_pos_a, old_pos_p])
+            move_idx = self.move_str_to_idx[move]
+
 
             # observe a reward from applying `move`
             game_result, reward = self.enviro.next_state(move,
                                                          plot_state=False,
                                                          move_num=time_step)
+
+
+            if use_adapting_epsilon:
+                self.epsilon = 1.0 / (num_q_update[old_idx][move_idx] + 1)
 
             # get the move based on epsilon-greedy policy
             _, moves = self.enviro.next_state_action(
@@ -281,10 +286,8 @@ class SARSALearner(QLearner):
                                                self.enviro.pos_p, moves)
 
             # make the update
-            move_idx = self.move_str_to_idx[move]
             move_prime_idx = self.move_str_to_idx[move_prime]
             cur_idx = state_to_idx([self.enviro.pos_a, self.enviro.pos_p])
-            old_idx = state_to_idx([old_pos_a, old_pos_p])
 
             update = reward + self.discount_factor * self.q[cur_idx][move_prime_idx] - \
                      self.q[old_idx][move_idx]
@@ -332,7 +335,8 @@ def plot_initial_q(initial_q, save_name=None):
 
 
 def main_sarsa():
-    for epsilon in [0.1, 0.3, 0.7]:
+    # for epsilon in [0.1, 0.3, 0.7]:
+    for epsilon in []:
         grid = GridTown()
         policy = SARSALearner(grid, epsilon=epsilon)
         initial_q = policy.learn(
@@ -363,7 +367,7 @@ def main_sarsa():
         use_adapting_epsilon=True
     )
 
-    grid.save_name = 'sarsa_adaptive_epsilon'
+    grid.save_name = 'sarsa_adaptive_epsilon2'
 
 
     run(grid, policy, max_iters=20, plot_state=True)
@@ -393,6 +397,6 @@ def main_q():
 
 
 if __name__ == '__main__':
-    main_q()
+    # main_q()
     main_sarsa()
 
