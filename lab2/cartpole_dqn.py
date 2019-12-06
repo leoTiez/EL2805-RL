@@ -76,8 +76,13 @@ class DQNAgent:
         #Tip 1: Use the random package to generate a random action.
         #Tip 2: Use keras.model.predict() to compute Q-values from the state.
         action = random.randrange(self.action_size)
-        return action
-###############################################################################
+        if random.random() < self.epsilon:
+            return action
+        else:
+            Q_actions = self.model.predict(state)
+            return np.argmax(Q_actions, axis=1)[0]
+
+    ###############################################################################
 ###############################################################################
     #Save sample <s,a,r,s'> to the replay memory
     def append_sample(self, state, action, reward, next_state, done):
@@ -111,7 +116,10 @@ class DQNAgent:
         #Tip 1: Observe that the Q-values are stored in the variable target
         #Tip 2: What is the Q-value of the action taken at the last state of the episode?
         for i in range(self.batch_size): #For every batch
-            target[i][action[i]] = random.randint(0,1)
+            if done[i]:
+                target[i][action[i]] = reward[i]
+            else:
+                target[i][action[i]] = self.discount_factor * np.max(target_val[i]) + reward[i]
 ###############################################################################
 ###############################################################################
 
