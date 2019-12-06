@@ -9,13 +9,13 @@ from keras.layers import Dense
 from keras.optimizers import Adam
 from keras.models import Sequential
 
-EPISODES = 1000 #Maximum number of episodes
+EPISODES = 700 #Maximum number of episodes
 
 #DQN Agent for the Cartpole
 #Q function approximation with NN, experience replay, and target network
 class DQNAgent:
     #Constructor for the agent (invoked when DQN is first called in main)
-    def __init__(self, state_size, action_size, num_units=16):
+    def __init__(self, state_size, action_size, arch=[16]):
         self.check_solve = False	#If True, stop if you satisfy solution confition
         self.render = False        #If you want to see Cartpole learning, then change to True
 
@@ -40,7 +40,7 @@ class DQNAgent:
         #Create memory buffer using deque
         self.memory = deque(maxlen=self.memory_size)
 
-        self.num_units = num_units
+        self.arch = arch
         #Create main network and target network (using build_model defined below)
         self.model = self.build_model()
         self.target_model = self.build_model()
@@ -56,8 +56,9 @@ class DQNAgent:
         #Tip: Consult https://keras.io/getting-started/sequential-model-guide/
     def build_model(self):
         model = Sequential()
-        model.add(Dense(self.num_units, input_dim=self.state_size, activation='relu',
-                        kernel_initializer='he_uniform'))
+        for num_units in self.arch:
+            model.add(Dense(num_units, input_dim=self.state_size, activation='relu',
+                            kernel_initializer='he_uniform'))
         model.add(Dense(self.action_size, activation='linear',
                         kernel_initializer='he_uniform'))
         model.summary()
@@ -171,7 +172,7 @@ def plot_data_multiple(episodes, scores, max_q_mean, dir_name, names):
 ###############################################################################
 ###############################################################################
 
-def train(num_units):
+def train(arch):
     #For CartPole-v0, maximum episode length is 200
     env = gym.make('CartPole-v0') #Generate Cartpole-v0 environment object from the gym library
     #Get state and action sizes from the environment
@@ -179,7 +180,7 @@ def train(num_units):
     action_size = env.action_space.n
 
     #Create agent, see the DQNAgent __init__ method for details
-    agent = DQNAgent(state_size, action_size, num_units=num_units)
+    agent = DQNAgent(state_size, action_size, arch=arch)
 
     #Collect test states for plotting Q values using uniform random policy
     test_states = np.zeros((agent.test_state_no, state_size))
@@ -235,8 +236,9 @@ def train(num_units):
                 scores.append(score)
                 episodes.append(e)
 
-                print("episode:", e, "  score:", score," q_value:", max_q_mean[e],"  memory length:",
-                      len(agent.memory))
+                if e % 100 == 0:
+                    print("episode:", e, "  score:", score," q_value:", max_q_mean[e],"  memory length:",
+                          len(agent.memory))
 
                 # if the mean of scores of last 100 episodes is bigger than 195
                 # stop training
@@ -253,12 +255,13 @@ if __name__ == '__main__':
     episodes = []
     scores = []
     max_q_means = []
-    num_unit_values = [16, 32, 64]
-    names = map(str, num_unit_values)
+    # num_unit_values = [16, 32, 64]
+    archs = [[16, 32], [16, 32, 32], [16, 32, 32, 32]]
+    names = map(str, archs)
 
-    for num_units in num_unit_values:
-        eps, score, qs = train(num_units)
+    for arch in archs:
+        eps, score, qs = train(arch)
         episodes.append(eps)
         scores.append(score)
         max_q_means.append(score)
-    plot_data_multiple(episodes, scores, max_q_means, 'part-g', names)
+    plot_data_multiple(episodes, scores, max_q_means, 'part-g2', names)
