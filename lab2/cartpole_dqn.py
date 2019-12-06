@@ -1,3 +1,4 @@
+import os
 import sys
 import gym
 import pylab
@@ -14,7 +15,7 @@ EPISODES = 1000 #Maximum number of episodes
 #Q function approximation with NN, experience replay, and target network
 class DQNAgent:
     #Constructor for the agent (invoked when DQN is first called in main)
-    def __init__(self, state_size, action_size):
+    def __init__(self, state_size, action_size, num_units=16):
         self.check_solve = False	#If True, stop if you satisfy solution confition
         self.render = False        #If you want to see Cartpole learning, then change to True
 
@@ -39,6 +40,7 @@ class DQNAgent:
         #Create memory buffer using deque
         self.memory = deque(maxlen=self.memory_size)
 
+        self.num_units = num_units
         #Create main network and target network (using build_model defined below)
         self.model = self.build_model()
         self.target_model = self.build_model()
@@ -54,7 +56,7 @@ class DQNAgent:
         #Tip: Consult https://keras.io/getting-started/sequential-model-guide/
     def build_model(self):
         model = Sequential()
-        model.add(Dense(16, input_dim=self.state_size, activation='relu',
+        model.add(Dense(self.num_units, input_dim=self.state_size, activation='relu',
                         kernel_initializer='he_uniform'))
         model.add(Dense(self.action_size, activation='linear',
                         kernel_initializer='he_uniform'))
@@ -128,23 +130,48 @@ class DQNAgent:
                        epochs=1, verbose=0)
         return
     #Plots the score per episode as well as the maximum q value per episode, averaged over precollected states.
-    def plot_data(self, episodes, scores, max_q_mean):
+    def plot_data(self, episodes, scores, max_q_mean, dir_name):
+
+        if not os.path.exists(dir_name):
+            os.makedirs(dir_name)
+
         pylab.figure(0)
         pylab.plot(episodes, max_q_mean, 'b')
         pylab.xlabel("Episodes")
         pylab.ylabel("Average Q Value")
-        pylab.savefig("qvalues.png")
+        pylab.savefig("%s/qvalues.png" % dir_name)
 
         pylab.figure(1)
         pylab.plot(episodes, scores, 'b')
         pylab.xlabel("Episodes")
         pylab.ylabel("Score")
-        pylab.savefig("scores.png")
+        pylab.savefig("%s/scores.png" % dir_name)
+
+def plot_data_multiple(episodes, scores, max_q_mean, dir_name, names):
+
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name)
+
+    pylab.figure(0)
+    for i in range(len(episodes)):
+        pylab.plot(episodes[i], max_q_mean[i])
+    pylab.xlabel("Episodes")
+    pylab.ylabel("Average Q Value")
+    pylab.legend([names])
+    pylab.savefig("%s/qvalues.png" % dir_name)
+
+    pylab.figure(1)
+    for i in range(len(episodes)):
+        pylab.plot(episodes[i], scores[i], 'b')
+    pylab.xlabel("Episodes")
+    pylab.ylabel("Score")
+    pylab.legend([names])
+    pylab.savefig("%s/scores.png" % dir_name)
 
 ###############################################################################
 ###############################################################################
 
-if __name__ == "__main__":
+def train(num_units):
     #For CartPole-v0, maximum episode length is 200
     env = gym.make('CartPole-v0') #Generate Cartpole-v0 environment object from the gym library
     #Get state and action sizes from the environment
@@ -152,7 +179,7 @@ if __name__ == "__main__":
     action_size = env.action_space.n
 
     #Create agent, see the DQNAgent __init__ method for details
-    agent = DQNAgent(state_size, action_size)
+    agent = DQNAgent(state_size, action_size, num_units=num_units)
 
     #Collect test states for plotting Q values using uniform random policy
     test_states = np.zeros((agent.test_state_no, state_size))
@@ -218,4 +245,20 @@ if __name__ == "__main__":
                         print("solved after", e-100, "episodes")
                         agent.plot_data(episodes,scores,max_q_mean[:e+1])
                         sys.exit()
-    agent.plot_data(episodes,scores,max_q_mean)
+    #agent.plot_data(episodes,scores,max_q_mean, '')
+    return episodes, scores, max_q_mean
+
+
+if __name__ == '__main__':
+    episodes = []
+    scores = []
+    max_q_means = []
+    num_unit_values = [16, 32, 64]
+    names = map(str, num_unit_values)
+
+    for num_units in num_unit_values:
+        eps, score, qs = train(num_units)
+        episodes.append(eps)
+        scores.append(score)
+        max_q_means.append(score)
+    plot_data_multiple(episodes, scores, max_q_means, 'part-g', names)
