@@ -250,7 +250,7 @@ def train(arch):
                     if np.mean(scores[-min(100, len(scores)):]) >= 195:
                         print("solved after", e-100, "episodes")
                         agent.plot_data(episodes,scores,max_q_mean[:e+1],'part-g2',arch)
-                        sys.exit()
+                        return episodes, scores, max_q_mean
     #agent.plot_data(episodes,scores,max_q_mean, '')
     return episodes, scores, max_q_mean
 
