@@ -158,6 +158,7 @@ def plot_data_multiple(episodes, scores, max_q_mean, dir_name, names):
         os.makedirs(dir_name)
 
     pylab.figure(0)
+    pylab.clf()
     for i in range(len(episodes)):
         pylab.plot(episodes[i], max_q_mean[i])
     pylab.xlabel("Episodes")
@@ -166,6 +167,7 @@ def plot_data_multiple(episodes, scores, max_q_mean, dir_name, names):
     pylab.savefig("%s/qvalues.png" % dir_name)
 
     pylab.figure(1)
+    pylab.clf()
     for i in range(len(episodes)):
         pylab.plot(episodes[i], scores[i])
     pylab.xlabel("Episodes")
@@ -233,7 +235,7 @@ def train(arch):
             state = next_state #Propagate state
 
             if done:
-                #At the end of very episode, update the target network
+                #At the end of very episodesepisode, update the target network
                 if e % agent.target_update_frequency == 0:
                     agent.update_target_model()
                 #Plot the play time for every episode
@@ -249,7 +251,7 @@ def train(arch):
                 if agent.check_solve:
                     if np.mean(scores[-min(100, len(scores)):]) >= 195:
                         print("solved after", e-100, "episodes")
-                        agent.plot_data(episodes,scores,max_q_mean[:e+1],'part-g2',arch)
+                        # agent.plot_data(episodes,scores,max_q_mean[:e+1],'part-g2',arch)
                         return episodes, scores, max_q_mean
     #agent.plot_data(episodes,scores,max_q_mean, '')
     return episodes, scores, max_q_mean
@@ -269,5 +271,5 @@ if __name__ == '__main__':
         eps, score, qs = train(arch)
         episodes.append(eps)
         scores.append(score)
-        max_q_means.append(qs)
+        max_q_means.append(qs[:len(score)])
     plot_data_multiple(episodes, scores, max_q_means, 'part-g2', names)
