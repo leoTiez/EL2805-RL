@@ -9,14 +9,14 @@ from keras.layers import Dense
 from keras.optimizers import Adam
 from keras.models import Sequential
 
-EPISODES = 700 #Maximum number of episodes
+EPISODES = 2000 #Maximum number of episodes
 
 #DQN Agent for the Cartpole
 #Q function approximation with NN, experience replay, and target network
 class DQNAgent:
     #Constructor for the agent (invoked when DQN is first called in main)
-    def __init__(self, state_size, action_size, arch=[16]):
-        self.check_solve = False	#If True, stop if you satisfy solution confition
+    def __init__(self, state_size, action_size, target_update_frequency=1, arch=[16]):
+        self.check_solve = True	#If True, stop if you satisfy solution confition
         self.render = False        #If you want to see Cartpole learning, then change to True
 
         #Get size of state and action
@@ -27,12 +27,12 @@ class DQNAgent:
 
         #Set hyper parameters for the DQN. Do not adjust those labeled as Fixed.
         self.discount_factor = 0.95
-        self.learning_rate = 0.005
+        self.learning_rate = 0.0005
         self.epsilon = 0.02 #Fixed
         self.batch_size = 32 #Fixed
-        self.memory_size = 1000
+        self.memory_size = 5000
         self.train_start = 1000 #Fixed
-        self.target_update_frequency = 1
+        self.target_update_frequency = target_update_frequency
 
         #Number of test states for Q value plots
         self.test_state_no = 10000
@@ -131,22 +131,26 @@ class DQNAgent:
                        epochs=1, verbose=0)
         return
     #Plots the score per episode as well as the maximum q value per episode, averaged over precollected states.
-    def plot_data(self, episodes, scores, max_q_mean, dir_name):
+    def plot_data(self, episodes, scores, max_q_mean, dir_name, arch=None):
 
         if not os.path.exists(dir_name):
             os.makedirs(dir_name)
 
+        if arch is None:
+            subname = ''
+        else:
+            subname = str(arch)
         pylab.figure(0)
         pylab.plot(episodes, max_q_mean, 'b')
         pylab.xlabel("Episodes")
         pylab.ylabel("Average Q Value")
-        pylab.savefig("%s/qvalues.png" % dir_name)
+        pylab.savefig("%s/qvalues-%s.png" % (dir_name, subname))
 
         pylab.figure(1)
         pylab.plot(episodes, scores, 'b')
         pylab.xlabel("Episodes")
         pylab.ylabel("Score")
-        pylab.savefig("%s/scores.png" % dir_name)
+        pylab.savefig("%s/scores-%s.png" % (dir_name,  subname))
 
 def plot_data_multiple(episodes, scores, max_q_mean, dir_name, names):
 
@@ -158,15 +162,15 @@ def plot_data_multiple(episodes, scores, max_q_mean, dir_name, names):
         pylab.plot(episodes[i], max_q_mean[i])
     pylab.xlabel("Episodes")
     pylab.ylabel("Average Q Value")
-    pylab.legend([names])
+    pylab.legend(names)
     pylab.savefig("%s/qvalues.png" % dir_name)
 
     pylab.figure(1)
     for i in range(len(episodes)):
-        pylab.plot(episodes[i], scores[i], 'b')
+        pylab.plot(episodes[i], scores[i])
     pylab.xlabel("Episodes")
     pylab.ylabel("Score")
-    pylab.legend([names])
+    pylab.legend(names)
     pylab.savefig("%s/scores.png" % dir_name)
 
 ###############################################################################
@@ -245,7 +249,7 @@ def train(arch):
                 if agent.check_solve:
                     if np.mean(scores[-min(100, len(scores)):]) >= 195:
                         print("solved after", e-100, "episodes")
-                        agent.plot_data(episodes,scores,max_q_mean[:e+1])
+                        agent.plot_data(episodes,scores,max_q_mean[:e+1],'part-g2',arch)
                         sys.exit()
     #agent.plot_data(episodes,scores,max_q_mean, '')
     return episodes, scores, max_q_mean
@@ -256,12 +260,14 @@ if __name__ == '__main__':
     scores = []
     max_q_means = []
     # num_unit_values = [16, 32, 64]
-    archs = [[16, 32], [16, 32, 32], [16, 32, 32, 32]]
-    names = map(str, archs)
+    # archs = [[8, 32], [16, 32, 32], [16, 32, 32, 32]]
+    archs = [[8], [16], [32], [64], [128]]
+    # archs = [[8]]
+    names = list(map(str, archs))
 
     for arch in archs:
         eps, score, qs = train(arch)
         episodes.append(eps)
         scores.append(score)
-        max_q_means.append(score)
+        max_q_means.append(qs)
     plot_data_multiple(episodes, scores, max_q_means, 'part-g2', names)
