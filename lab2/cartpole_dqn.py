@@ -8,6 +8,7 @@ from collections import deque
 from keras.layers import Dense
 from keras.optimizers import Adam
 from keras.models import Sequential
+from gym import wrappers
 
 EPISODES = 2000 #Maximum number of episodes
 
@@ -15,7 +16,7 @@ EPISODES = 2000 #Maximum number of episodes
 #Q function approximation with NN, experience replay, and target network
 class DQNAgent:
     #Constructor for the agent (invoked when DQN is first called in main)
-    def __init__(self, state_size, action_size, target_update_frequency=1, arch=[16]):
+    def __init__(self, state_size, action_size, target_update_frequency=1, arch=[16], discount_factor=0.95, learning_rate=0.0005, mem_size=5000):
         self.check_solve = True	#If True, stop if you satisfy solution confition
         self.render = False        #If you want to see Cartpole learning, then change to True
 
@@ -26,11 +27,11 @@ class DQNAgent:
        # Modify here
 
         #Set hyper parameters for the DQN. Do not adjust those labeled as Fixed.
-        self.discount_factor = 0.95
-        self.learning_rate = 0.0005
+        self.discount_factor = discount_factor
+        self.learning_rate = learning_rate
         self.epsilon = 0.02 #Fixed
         self.batch_size = 32 #Fixed
-        self.memory_size = 5000
+        self.memory_size = mem_size
         self.train_start = 1000 #Fixed
         self.target_update_frequency = target_update_frequency
 
@@ -152,7 +153,7 @@ class DQNAgent:
         pylab.ylabel("Score")
         pylab.savefig("%s/scores-%s.png" % (dir_name,  subname))
 
-def plot_data_multiple(episodes, scores, max_q_mean, dir_name, names):
+def plot_data_multiple(episodes, scores, max_q_mean, solved_times, dir_name, names):
 
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
@@ -160,7 +161,10 @@ def plot_data_multiple(episodes, scores, max_q_mean, dir_name, names):
     pylab.figure(0)
     pylab.clf()
     for i in range(len(episodes)):
-        pylab.plot(episodes[i], max_q_mean[i])
+        pylab.plot(episodes[i], max_q_mean[i], label=names[i])
+    actually_solved_times = [time for time in solved_times if time != -1]
+    solved_values = [max_q_mean[i][solved_times[i]] for i in range(len(solved_times)) if solved_times[i] != -1]
+    pylab.plot(actually_solved_times, solved_values, 'kx', label='solved')
     pylab.xlabel("Episodes")
     pylab.ylabel("Average Q Value")
     pylab.legend(names)
@@ -172,21 +176,44 @@ def plot_data_multiple(episodes, scores, max_q_mean, dir_name, names):
         pylab.plot(episodes[i], scores[i])
     pylab.xlabel("Episodes")
     pylab.ylabel("Score")
-    pylab.legend(names)
+    pylab.legend()
     pylab.savefig("%s/scores.png" % dir_name)
 
 ###############################################################################
 ###############################################################################
 
-def train(arch):
+def simulate(agent, times):
+    env = gym.make('CartPole-v0')
+    env = wrappers.Monitor(env, directory='sims/trained', force=True)
+
+    for run in range(times):
+        state = env.reset()
+        state_size = env.observation_space.shape[0]
+        state = np.reshape(state, [1, state_size])  # Reshape state so that to a 1 by state_size two-dimensional array ie. [x_1,x_2] to [[x_1,x_2]]
+
+        done = False
+        while not done:
+            #env.render()  # Show cartpole animation
+
+            # Get action for the current state and go one step in environment
+            action = agent.get_action(state)
+            state, reward, done, info = env.step(action)
+            state = np.reshape(state, [1, state_size])  # Reshape next_state similarly to state
+    env.close()
+
+
+def train(arch, discount_factor=0.95, learning_rate=0.0005, mem_size=5000, update_freq=1):
+    solved = -1
     #For CartPole-v0, maximum episode length is 200
     env = gym.make('CartPole-v0') #Generate Cartpole-v0 environment object from the gym library
+    #env = wrappers.Monitor(env, directory='sims/training', force=True)
+
     #Get state and action sizes from the environment
     state_size = env.observation_space.shape[0]
     action_size = env.action_space.n
 
     #Create agent, see the DQNAgent __init__ method for details
-    agent = DQNAgent(state_size, action_size, arch=arch)
+    agent = DQNAgent(state_size, action_size, arch=arch, discount_factor=discount_factor, learning_rate=learning_rate, mem_size=mem_size, target_update_frequency=update_freq)
 
     #Collect test states for plotting Q values using uniform random policy
     test_states = np.zeros((agent.test_state_no, state_size))
@@ -248,13 +275,17 @@ def train(arch):
 
                 # if the mean of scores of last 100 episodes is bigger than 195
                 # stop training
-                if agent.check_solve:
+                if agent.check_solve and solved == -1:
                     if np.mean(scores[-min(100, len(scores)):]) >= 195:
                         print("solved after", e-100, "episodes")
+                        solved = e-100
                         # agent.plot_data(episodes,scores,max_q_mean[:e+1],'part-g2',arch)
-                        return episodes, scores, max_q_mean
+                        env.close()
+                        simulate(agent, 3)
+                        return episodes, scores, max_q_mean, solved
+    env.close()
     #agent.plot_data(episodes,scores,max_q_mean, '')
-    return episodes, scores, max_q_mean
+    return episodes, scores, max_q_mean, solved
 
 
 if __name__ == '__main__':
@@ -263,13 +294,30 @@ if __name__ == '__main__':
     max_q_means = []
     # num_unit_values = [16, 32, 64]
     # archs = [[8, 32], [16, 32, 32], [16, 32, 32, 32]]
-    archs = [[8], [16], [32], [64], [128]]
+    # archs = [[8], [16], [32], [64], [128]]
     # archs = [[8]]
-    names = list(map(str, archs))
+    #names = list(map(str, archs))
 
-    for arch in archs:
-        eps, score, qs = train(arch)
-        episodes.append(eps)
-        scores.append(score)
-        max_q_means.append(qs[:len(score)])
-    plot_data_multiple(episodes, scores, max_q_means, 'part-g2', names)
+    # discount factor tests
+    # discount_factors = [0.7, 0.8, 0.9, 0.95, 0.99]
+    # names = list(map(str, discount_factors))
+    arch = [128]
+    # learning_rates = [0.00005, 0.0001, 0.0005, 0.001, 0.005, 0.01]
+    # names = list(map(str, learning_rates))
+    # mem_sizes = [500, 1000, 5000, 9000]
+    # names = list(map(str, mem_sizes))
+
+    # update_freqs = [1, 2, 4, 6, 10]
+    # names = list(map(str, update_freqs))
+    #
+    # solved_times = []
+    #
+    # for update_freq in update_freqs:
+    #     eps, score, qs, solved = train(arch, discount_factor=0.95, learning_rate=0.0005, mem_size=5000, update_freq=update_freq)
+    #     episodes.append(eps)
+    #     scores.append(score)
+    #     max_q_means.append(qs[:len(score)])
+    #     solved_times.append(solved)
+    # plot_data_multiple(episodes, scores, max_q_means, solved_times, 'update-freq', names)
+
+    train([128], discount_factor=0.95, learning_rate=0.0005, mem_size=5000, update_freq=1)
