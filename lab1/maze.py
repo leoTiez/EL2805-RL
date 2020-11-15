@@ -145,9 +145,9 @@ class Maze:
             return Maze.STATE_DICT['running']
 
     def plot_state(self, save_fig=False, iter=0):
-        plt.figure()
         plt.matshow(self.maze, cmap=plt.cm.cividis)
         plt.grid()
+        plt.title('Maze. Grey: Agent. Yellow: Enemy.')
         if save_fig:
             makedirs('plots', exist_ok=True)
             plt.savefig('plots/%d.png' % iter)
@@ -263,7 +263,7 @@ class MazeInfiniteHorizon(Maze):
                 value_temp[state_ind], pi[state_ind] = self._compute_value(state_ind, value, surviving_p=surviving_p)
             value_difference = np.linalg.norm(value - value_temp)
             if self.verbosity > 0:
-                print(value_difference)
+                print('########### Value update margin: %s' % value_difference)
             value = value_temp
 
         return pi
@@ -384,7 +384,6 @@ def plot_max_prob(min_time_horizon=10, max_time_horizon=35, num_runs=1000,
         print('No stay', wins / float(num_runs))
         print('Stay', wins_stay / float(num_runs))
 
-    plt.figure()
     plt.plot(time_horizon_list, win_ratio)
     plt.plot(time_horizon_list, win_ratio_stay)
     plt.legend(['without stay move', 'with_stay_move'])
@@ -431,22 +430,22 @@ def test_maze_finite(is_plotting=True):
     print('wins %f draws %f losses %f' % (wins / trials, draws / trials,
                                           losses / trials))
 
+
 def main_plot_value_function():
     vals = []
-    xs = list(range(14, 15))
+    xs = list(range(14, 30))
     for i in xs:
         maze = MazeFiniteHorizon(time_horizon=i, allow_b_stay=True)
         vals.append(maze.learn(return_value_func=True))
-    plt.figure()
     plt.plot(xs, vals)
     plt.show()
+
 
 if __name__ == '__main__':
     # test_maze_finite()
     # main_infinite()
-    #plot_max_prob(min_time_horizon=12, save_plot=True, max_time_horizon=50)
+    # plot_max_prob(min_time_horizon=12, save_plot=False, max_time_horizon=50)
     # main_comparison()
-    #main(trials=1, is_finite=True, is_plotting=False, save_fig=False)
-    # main(is_finite=False, is_plotting=False)
-    main_plot_value_function()
+    main(is_finite=False, is_plotting=True)
+    # main_plot_value_function()
 
