@@ -268,12 +268,10 @@ class SARSALearner(QLearner):
             old_idx = state_to_idx([old_pos_a, old_pos_p])
             move_idx = self.move_str_to_idx[move]
 
-
             # observe a reward from applying `move`
             game_result, reward = self.enviro.next_state(move,
                                                          plot_state=False,
                                                          move_num=time_step)
-
 
             if use_adapting_epsilon:
                 self.epsilon = 1.0 / (num_q_update[old_idx][move_idx] + 1)
@@ -303,6 +301,7 @@ class SARSALearner(QLearner):
 
         if record_initial_q:
             return initial_q
+
 
 def run(grid, policy, max_iters=None, plot_state=False):
     grid.reset()
@@ -334,47 +333,45 @@ def plot_initial_q(initial_q, save_name=None):
         plt.show()
 
 
-def main_sarsa():
-    # for epsilon in [0.1, 0.3, 0.7]:
-    for epsilon in []:
+def main_sarsa(use_adaptive_epsilon=True):
+    if not use_adaptive_epsilon:
+        for epsilon in [0.1, 0.3, 0.7]:
+            grid = GridTown()
+            policy = SARSALearner(grid, epsilon=epsilon)
+            initial_q = policy.learn(
+                max_iterations=int(1e7),
+                record_initial_q=True,
+                use_learning_rate=True,
+                plotting_freq=int(1e4),
+                use_adapting_epsilon=False
+            )
+
+            grid.save_name = 'sarsa_epsilon_%.2f' % epsilon
+
+            run(grid, policy, max_iters=20, plot_state=True)
+            print('Cumulative reward for epsilon = %f is %d' %
+                  (epsilon, grid.cumulative_reward))
+
+            plot_initial_q(initial_q, grid.save_name +
+                           '/initial_q_sarsa_epsilon.png')
+
+    else:
         grid = GridTown()
-        policy = SARSALearner(grid, epsilon=epsilon)
+        policy = SARSALearner(grid)
         initial_q = policy.learn(
             max_iterations=int(1e7),
             record_initial_q=True,
             use_learning_rate=True,
             plotting_freq=int(1e4),
-            use_adapting_epsilon=False
+            use_adapting_epsilon=True
         )
 
-        grid.save_name = 'sarsa_epsilon_%.2f' % epsilon
+        grid.save_name = 'sarsa_adaptive_epsilon2'
 
         run(grid, policy, max_iters=20, plot_state=True)
-        print('Cumulative reward for epsilon = %f is %d' %
-              (epsilon, grid.cumulative_reward))
-
-        plot_initial_q(initial_q, grid.save_name +
-                       '/initial_q_sarsa_epsilon.png')
-
-
-    grid = GridTown()
-    policy = SARSALearner(grid)
-    initial_q = policy.learn(
-        max_iterations=int(1e7),
-        record_initial_q=True,
-        use_learning_rate=True,
-        plotting_freq=int(1e4),
-        use_adapting_epsilon=True
-    )
-
-    grid.save_name = 'sarsa_adaptive_epsilon2'
-
-
-    run(grid, policy, max_iters=20, plot_state=True)
-    print('Cumulative reward for epsilon = 1/t is %d' %
-          grid.cumulative_reward)
-    plot_initial_q(initial_q, grid.save_name + '/initial_q_sarsa_adaptive.png')
-
+        print('Cumulative reward for epsilon = 1/t is %d' %
+              grid.cumulative_reward)
+        plot_initial_q(initial_q, grid.save_name + '/initial_q_sarsa_adaptive.png')
 
 
 def main_q():
@@ -389,11 +386,8 @@ def main_q():
 
     grid.save_name = 'q'
 
-
     run(grid, policy, max_iters=20, plot_state=True)
     plot_initial_q(initial_q, grid.save_name + '/initial_q_qlearning.png')
-
-
 
 
 if __name__ == '__main__':
